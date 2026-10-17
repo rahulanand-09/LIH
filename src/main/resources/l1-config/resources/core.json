@@ -1,0 +1,13 @@
+{
+  "resource": "core",
+  "kind": "HTTP",
+  "auth": { "type": "API_KEY_HEADER", "header": "Authorization", "secretRef": "CORE_TOKEN" },
+  "headers": { "Accept": "application/json" },
+  "timeoutMs": { "connect": 10000, "read": 30000 },
+  "pool": { "maxConnections": 20 },
+  "env": {
+    "local": { "baseUrlRef": "CORE_BASEURL", "values": { "customerDataPath": "/api/support/fetchloandetailsv2" } },
+    "qa":    { "baseUrl": "https://coresvc-red-qa.rupeek.co", "values": { "customerDataPath": "/api/support/fetchloandetailsv2" } },
+    "prod":  { "baseUrl": "https://coresvc.rupeek.com", "values": { "customerDataPath": "/api/support/fetchloandetailsv2" } }
+  }
+}

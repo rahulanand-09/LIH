@@ -1,0 +1,45 @@
+{
+  "op": "map.axis.precheckRequest",
+  "kind": "MAP",
+  "resource": "axis-precheck",
+  "params": { "customer": { "type": "map", "pii": true }, "clientLoanId": { "type": "string" } },
+  "template": {
+    "agreement_id": "=env.preCheckAgreementId",
+    "customer_id": "=params.customer.id",
+    "client_loan_id": "=params.clientLoanId",
+    "model_name": "CLM1",
+    "customer_type": "individual",
+    "first_name": "=rk.nameSplit(params.customer, 'first')",
+    "middle_name": "=rk.nameSplit(params.customer, 'middle')",
+    "last_name": "=rk.nameSplit(params.customer, 'last')",
+    "name_as_per_pan": "=params.customer.?customerPanName.orValue(null)",
+    "date_of_birth": "=params.customer.?dob.orValue(null)",
+    "date_of_birth_as_per_pan": "=params.customer.?dob.orValue(null)",
+    "mobile_number": "=params.customer.?customerPhone.orValue(null)",
+    "email": "=params.customer.?email.orValue(null)",
+    "gender": "=params.customer.?gender.orValue(null)",
+    "dedupe_type": "single",
+    "aadhar_number": "=params.customer.?aadhar.orValue(null)",
+    "dedupe_ids": [
+      { "id_type": "PAN", "id_value": "=params.customer.?pan.orValue(null)" },
+      { "id_type": "AADHAR", "id_value": "=params.customer.?aadhar.orValue(null)" }
+    ],
+    "address": [
+      {
+        "address_type": "PERMANENT",
+        "address_value": "=regex.replace(params.customer.customerAddress, r'\\s+', ' ').trim()",
+        "address_city": "=params.customer.permanentAddress.city",
+        "address_state": "=params.customer.permanentAddress.state",
+        "address_pincode": "=params.customer.permanentAddress.pin"
+      },
+      {
+        "address_type": "COMMUNICATION",
+        "address_value": "=regex.replace(params.customer.customerAddress, r'\\s+', ' ').trim()",
+        "address_city": "=params.customer.?presentAddress.?city.orValue(null)",
+        "address_state": "=params.customer.?presentAddress.?state.orValue(null)",
+        "address_pincode": "=params.customer.?presentAddress.?pin.orValue(null)"
+      }
+    ]
+  },
+  "out": { "value": "result" }
+}

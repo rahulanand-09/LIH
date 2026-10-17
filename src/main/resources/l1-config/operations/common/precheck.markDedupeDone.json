@@ -1,0 +1,13 @@
+{
+  "op": "precheck.markDedupeDone",
+  "kind": "MONGO",
+  "resource": "lendercore-mongo",
+  "params": { "loanRequestId": { "type": "string" }, "lender": { "type": "string" }, "applicantId": { "type": "string" } },
+  "collection": "LenderCustomerPrecheck",
+  "action": "UPDATE_ONE",
+  "filter": { "loanRequestId": ":loanRequestId", "lenderSlug": ":lender" },
+  "set": { "applicantId": ":applicantId", "precheckStatus": "processed", "last_updated": ":sys.now" },
+  "inc": { "version": 1 },
+  "expect": { "matched": 1 },
+  "out": { "matched": "result.matched" }
+}

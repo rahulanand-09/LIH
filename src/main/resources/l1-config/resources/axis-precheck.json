@@ -1,0 +1,13 @@
+{
+  "resource": "axis-precheck",
+  "kind": "HTTP",
+  "auth": { "type": "API_KEY_HEADER", "header": "API-key", "secretRef": "AXIS_PRECHECK_API_KEY" },
+  "headers": { "Content-Type": "application/json" },
+  "timeoutMs": { "connect": 120000, "read": 120000 },
+  "pool": { "maxConnections": 20 },
+  "env": {
+    "local": { "baseUrlRef": "AXIS_PRECHECK_BASEURL", "values": { "preCheckAgreementId": "local-agreement" } },
+    "qa":    { "baseUrlRef": "AXIS_PRECHECK_BASEURL", "values": { "preCheckAgreementId": "2181" } },
+    "prod":  { "baseUrlRef": "AXIS_PRECHECK_BASEURL", "values": { "preCheckAgreementId": "323" } }
+  }
+}
