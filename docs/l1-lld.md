@@ -466,7 +466,7 @@ public interface OperationExecutor {
 | Query / headers | Templates; header names literal |
 | Body | `request.body` template; `bodyEncoding` `JSON` (default) or `FORM` |
 | Auth | `AuthProvider` by `resource.auth.type`; secret from `SecretResolver` at call time; never logged |
-| Timeouts / pool | Resource defaults, op override; one `HttpClient` per resource |
+| Timeouts / pool | Resource defaults, op override; one `HttpClient` per resource. The JDK client has no per-client connection cap, so `pool.maxConnections` is not enforced yet (JVM-wide `jdk.httpclient.connectionPoolSize` applies) |
 | Response | `resp.status`, `resp.headers`, `resp.body` (JSON → maps/lists; non-JSON → string) |
 | Not done here | Retries (Temporal), success checks (engine) |
 
@@ -476,7 +476,7 @@ HTTP spec fields: `request{method, path, query, headers, body, bodyEncoding}`, `
 
 | Concern | Rule |
 |---|---|
-| Actions | `FIND_ONE`, `FIND_MANY` (`limit` ≤ 100), `INSERT`, `UPDATE_ONE`, `UPSERT` |
+| Actions | `FIND_ONE`, `FIND_MANY` (`limit` ≤ 100), `INSERT` (inserts the bound `set` document), `UPDATE_ONE`, `UPSERT` (`setOnInsert` only here) |
 | Shape | `collection`, `filter`, `set`, `setOnInsert`, `inc`, `sort`, `projection` fixed; `":name"` bound from `params`/`sys` |
 | Rejected at publish | `$where`, `$function`, `$accumulator`, `$expr`; collections outside the resource allowlist |
 | `expect` | e.g. `{matched: 1}`; violation `PERMANENT` |
@@ -537,6 +537,7 @@ Masks `piiPaths`, `pii: true` params, and global keys: `pan`, `aadhar`,
 |---|---|
 | `lih_l1_task_seconds` | `recipe`, `version`, `lender`, `outcome`/`failure` |
 | `lih_l1_step_seconds` | `recipe`, `step`, `op`, `kind`, `result` |
+| `lih_l1_operation_seconds` (from `MetricsInterceptor`) | `recipe`, `step`, `op`, `kind`, `result` (`ok`, `transport`, or error class) |
 | `lih_l1_http_client_seconds` | `resource`, `method`, `status` |
 | `lih_l1_expr_errors_total` | `recipe`, `path` |
 | `lih_l1_code_ops_total` | `recipe`, `op` |

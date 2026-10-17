@@ -17,6 +17,7 @@
     <java.version>21</java.version>
     <temporal.version>1.40.0</temporal.version>
     <cel.version>0.14.0</cel.version>
+    <wiremock.version>3.13.2</wiremock.version>
     <!-- CEL needs protobuf 4.x and the -jre Guava; Temporal would otherwise pull protobuf 3.25 and Guava -android.
          Pin one consistent set for both (verified by the Temporal tests). -->
     <protobuf.version>4.35.1</protobuf.version>
@@ -61,6 +62,11 @@
       <artifactId>temporal-sdk</artifactId>
       <version>${temporal.version}</version>
     </dependency>
+    <!-- Metrics and observations for L1 interceptors (Micrometer) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
     <!-- L1 expression language (com.rupeek.l1.expr) -->
     <dependency>
       <groupId>dev.cel</groupId>
@@ -81,6 +87,23 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- L1 executor tests: mock HTTP server and real Mongo in Docker -->
+    <dependency>
+      <groupId>org.wiremock</groupId>
+      <artifactId>wiremock-standalone</artifactId>
+      <version>${wiremock.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>mongodb</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
