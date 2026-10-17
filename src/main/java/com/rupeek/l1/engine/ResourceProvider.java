@@ -1,4 +1,4 @@
-package com.rupeek.l1.registry;
+package com.rupeek.l1.engine;
 
 import com.rupeek.l1.model.Resource;
 

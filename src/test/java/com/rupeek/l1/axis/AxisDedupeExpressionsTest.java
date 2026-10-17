@@ -159,6 +159,9 @@ class AxisDedupeExpressionsTest {
         assertThat(ENGINE.eval(classify, errorsIn200)).isEqualTo("BUSINESS");
         assertThat(ENGINE.eval(applicantId, errorsIn200)).isNull();
 
+        Map<String, Object> serverError = httpScope(Map.of("type", "dedupe"), 500, Map.of());
+        assertThat(ENGINE.eval(classify, serverError)).isEqualTo("UNKNOWN");   // may have been processed (Q5)
+
         Map<String, Object> unavailable = httpScope(Map.of("type", "dedupe"), 503, Map.of());
         assertThat(ENGINE.evalBool(success, unavailable)).isFalse();
         assertThat(ENGINE.eval(classify, unavailable)).isEqualTo("TECHNICAL");

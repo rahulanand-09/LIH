@@ -56,6 +56,26 @@ public final class PiiMasker {
         return out;
     }
 
+    /**
+     * Values that must never leave the worker: strings under a {@link #GLOBAL_KEYS} key at any depth, and the value
+     * itself when it is a plain string declared PII ({@code wholeValueIsPii}). Used by the engine's output guard.
+     */
+    public static void collectPiiValues(Object value, boolean wholeValueIsPii, Collection<String> into) {
+        if (value instanceof Map<?, ?> m) {
+            m.forEach((k, v) -> {
+                if (GLOBAL_KEYS.contains(String.valueOf(k).toLowerCase(Locale.ROOT))) {
+                    collectStrings(v, into);
+                } else {
+                    collectPiiValues(v, false, into);
+                }
+            });
+        } else if (value instanceof List<?> l) {
+            l.forEach(v -> collectPiiValues(v, false, into));
+        } else if (value instanceof String s && wholeValueIsPii) {
+            into.add(s);
+        }
+    }
+
     /** All string leaves of a value, for {@link #maskText}. */
     public static void collectStrings(Object value, Collection<String> into) {
         if (value instanceof Map<?, ?> m) {

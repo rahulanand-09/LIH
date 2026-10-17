@@ -104,20 +104,20 @@ All new code lives under `com.rupeek.l1`. No class names a lender.
 | `l1.model` | `Recipe`, `Step`, `ReturnSpec`, `OnError`, `OperationDef`, `HttpSpec`, `MongoSpec`, `MapSpec`, `GenSpec`, `Resource`, `ResourceEnv`, `AuthSpec` | Immutable config objects parsed from JSON |
 | `l1.expr` | `ExpressionEngine`, `CelExpressionEngine`, `CompiledExpr`, `ScopeDecl`, `TemplateEvaluator`, `ExprCompileException`, `ExprEvalException` | Compile / evaluate CEL; render templates |
 | `l1.expr.fn` | `FunctionLibrary`, `RkFunctions` | `rk.*` functions registered with CEL |
-| `l1.engine` | `RecipeRunner`, `CompiledRecipe`, `CompiledStep`, `CompiledOperation`, `OperationInvoker`, `StepContext`, `ErrorClassifier`, `ErrorClass`, `L1Failure`, `OutputGuard` | Run a recipe; classify and route failures |
-| `l1.ops` | `OperationExecutor`, `OperationRegistry`, `ExecContext`, `TransportException` | Interface every kind implements |
+| `l1.engine` | `RecipeRunner`, `CompiledRecipe`, `CompiledOperation`, `ConfigCompiler`, `OperationInvoker`, `StepContext`, `ErrorClassifier`, `L1Failure`, `OutputGuard`, and the interfaces the engine needs: `RecipeSource`, `ResourceProvider` | Compile and run a recipe; classify and route failures |
+| `l1.ops` | `OperationExecutor`, `PreparedOperation`, `OperationRegistry`, `ExecContext`, `CallRecorder`, `ErrorClass`, `TransportException`, `OperationException` | Interface every kind implements |
 | `l1.ops.http` | `HttpOperationExecutor`, `HttpClientFactory`, `AuthProvider`, `ApiKeyHeaderAuth`, `StaticBearerAuth`, `NoAuth` | REST |
 | `l1.ops.mongo` | `MongoOperationExecutor`, `MongoQueryBinder` | Fixed-shape Mongo operations |
 | `l1.ops.map` | `MapOperationExecutor` | Templates |
 | `l1.ops.gen` | `GenOperationExecutor` | Stable ids, time |
 | `l1.intercept` | `OperationInterceptor`, `InterceptorChain`, `TracingInterceptor`, `MetricsInterceptor`, `AuditInterceptor`, `AuditWriter`, `PiiMasker` | Cross-cutting concerns |
-| `l1.registry` | `RegistryService`, `RegistryRepository`, `ConfigCache`, `ResourceProvider`, `ConfigCompiler` | Load, compile, cache, resolve |
+| `l1.registry` | `ClasspathConfigLoader`, `StaticRecipeSource`, `InMemoryResourceProvider` (POC); Mongo registry and caches in M4 | Load and serve config versions and resources |
 | `l1.publish` | `Publisher`, `PublishValidator`, `DataflowChecker`, `PublishReport` | Validate and store new versions |
 | `l1.secrets` | `SecretResolver`, `EnvSecretResolver` | `secretRef` → value at call time |
-| `l1.worker` | `TaskActivityImpl`, `L1WorkerConfig` | Temporal activity + worker start-up |
+| `l1.worker` | `TaskActivityImpl`, `L1Components` (the single wiring path), `L1AutoConfiguration`, `L1Properties`, `L1TemporalWorker` | Temporal activity + worker start-up |
 | `l1.testkit` (test sources) | `GoldenTestRunner`, `GoldenCase`, `OperationMocks`, `WriteRecorder` | Golden and rerun tests |
 
-Dependency direction: `worker → engine → {expr, ops, registry, intercept}`; `ops`/`registry`/`intercept` → `model`/`expr`; `api` depends on nothing.
+Dependency direction: `worker → {engine, registry}`; `registry → engine` (implements `RecipeSource`, `ResourceProvider`); `engine → {expr, ops, intercept, model}`; `ops`/`intercept` → `model`/`expr`; `api` depends on nothing. No cycles.
 
 ---
 
@@ -440,6 +440,11 @@ Only `TaskResult` reaches Temporal history.
 that no value of a `pii: true` parameter seen in the run appears in the
 outputs. Violation → `PERMANENT`.
 
+### Unexpected errors
+
+An exception that is not an `L1Failure` (a bug) leaves `RunTask` as non-retryable `L1_PERMANENT` with the message
+`internal error: <ExceptionType>`: a bug must never cause a blind retry of a lender call.
+
 ### Rerun safety
 
 No step journal in the POC. Recipes are written rerun-safe (rule 3). A
@@ -535,8 +540,7 @@ Masks `piiPaths`, `pii: true` params, and global keys: `pan`, `aadhar`,
 
 | Metric | Tags |
 |---|---|
-| `lih_l1_task_seconds` | `recipe`, `version`, `lender`, `outcome`/`failure` |
-| `lih_l1_step_seconds` | `recipe`, `step`, `op`, `kind`, `result` |
+| `lih_l1_task_seconds` | `recipe`, `version`, `lender`, `result` (outcome or error class) |
 | `lih_l1_operation_seconds` (from `MetricsInterceptor`) | `recipe`, `step`, `op`, `kind`, `result` (`ok`, `transport`, or error class) |
 | `lih_l1_http_client_seconds` | `resource`, `method`, `status` |
 | `lih_l1_expr_errors_total` | `recipe`, `path` |
@@ -690,7 +694,7 @@ Behaviour change vs legacy (to confirm): a failed dedupe returns
     "body": "=params.body"
   },
   "success":  "resp.status == 200 && resp.body.?errors.orValue([]).size() == 0 && has(resp.body.data)",
-  "classify": "resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
+  "classify": "resp.status == 500 ? 'UNKNOWN' : resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
   "out": { "applicantId": "resp.body.?data.?applicantId.orValue(null)" },
   "audit": "={'dedupe': 'PRECHECK_DEDUPE', 'dedupe_timble': 'PRECHECK_TIMBLE', 'dedupe_status': 'PRECHECK_STATUS'}[params.type]",
   "piiPaths": ["$.aadhar_number", "$.dedupe_ids[*].id_value", "$.mobile_number", "$.email",
@@ -833,7 +837,8 @@ Expected load is small (≈ 500 cases/day × 10–12 steps).
 | Start-up | Compile all config → refuse to start on errors → start polling |
 | Shutdown | Stop polling; finish running activities up to 60 s |
 | Health | Liveness: process; readiness: config compiled, Mongo + Temporal reachable |
-| Config | `l1.env` (`qa`/`uat`/`prod`), `l1.config-source` (`classpath`/`mongo`) |
+| Config | `l1.enabled` (default `false`), `l1.env` (`local`/`qa`/`uat`/`prod`), `l1.config-location` (`classpath:l1-config`), `l1.mongo-datasource`, `l1.temporal.{enabled,target,namespace,task-queue,max-concurrent-activities}`, `l1.audit.{enabled,database,queue-capacity}` |
+| Wiring | `L1AutoConfiguration` is a Spring Boot auto-configuration (no component scan needed) and is off unless `l1.enabled=true`; start-up fails fast if config does not compile or Temporal is unreachable |
 
 ---
 

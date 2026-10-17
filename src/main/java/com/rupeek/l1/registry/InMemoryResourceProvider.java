@@ -1,5 +1,6 @@
 package com.rupeek.l1.registry;
 
+import com.rupeek.l1.engine.ResourceProvider;
 import com.rupeek.l1.model.ConfigJson;
 import com.rupeek.l1.model.Resource;
 
