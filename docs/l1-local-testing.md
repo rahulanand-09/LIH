@@ -17,10 +17,25 @@ dev/l1-local/l1-local.sh app     # LIH app with l1.enabled=true, l1.env=local, p
 
 When the app is up, it logs `L1 worker polling task queue 'lih-l1'`.
 
+### Running published versions (registry mode)
+
+By default the app loads `src/main/resources/l1-config` from the classpath. To run what is published in the
+local `lih_config` registry instead:
+
+```bash
+dev/l1-local/l1-local.sh publish                     # validate + golden + publish to mongodb://localhost:27018/lih_config
+L1_REGISTRY=mongo dev/l1-local/l1-local.sh app       # logs "L1 registry: compiled N recipe version(s)"
+dev/l1-local/l1-local.sh config status               # what is live
+dev/l1-local/l1-local.sh probe LR-OK-5 1 2           # run recipe version 2 (3rd argument)
+```
+
+Publishing a new version while the app is running takes effect without a restart. See
+[`l1-config-publishing.md`](l1-config-publishing.md).
+
 ## Run a scenario
 
 ```bash
-dev/l1-local/l1-local.sh probe LR-OK-1        # optional 2nd arg: runNo (default 1)
+dev/l1-local/l1-local.sh probe LR-OK-1        # optional: runNo (default 1), recipeVersion (default 1)
 ```
 
 The stubs choose the scenario from the `loanRequestId` prefix:
@@ -53,5 +68,6 @@ Only use UAT credentials, and test loan requests.
 
 ```bash
 docker exec l1-mongo mongosh -quiet lendercore --eval 'db.LenderCustomerPrecheck.drop(); db.LenderApiAuditLog.drop()'
+docker exec l1-mongo mongosh -quiet lih_config --eval 'db.dropDatabase()'   # the local registry
 rm -f target/l1-temporal.db   # Temporal history (with infra stopped)
 ```

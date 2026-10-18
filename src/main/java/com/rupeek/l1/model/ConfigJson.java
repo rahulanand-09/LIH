@@ -34,6 +34,11 @@ public final class ConfigJson {
         return read(in, Resource.class, source);
     }
 
+    /** Parses one document from a string, e.g. a spec stored in the registry. */
+    public static <T> T read(String json, Class<T> type, String source) {
+        return read(new java.io.ByteArrayInputStream(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)), type, source);
+    }
+
     public static ObjectMapper mapper() {
         return MAPPER;
     }

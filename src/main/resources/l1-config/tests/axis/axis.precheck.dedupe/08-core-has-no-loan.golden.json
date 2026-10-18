@@ -1,0 +1,25 @@
+{
+  "name": "Core knows no loan for the request: PERMANENT, Axis not called",
+  "recipe": "axis.precheck.dedupe",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1",
+    "runNo": 1
+  },
+  "mocks": {
+    "core.fetchCustomerByLoanRequest@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "UserMsg": "SUCCESS",
+          "loandata": []
+        }
+      }
+    }
+  },
+  "expect": {
+    "failure": "L1_PERMANENT",
+    "notCalled": [
+      "axis.precheck.invoke@1"
+    ]
+  }
+}

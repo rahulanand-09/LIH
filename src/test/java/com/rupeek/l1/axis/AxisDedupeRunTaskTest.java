@@ -11,6 +11,7 @@ import com.rupeek.l1.api.TaskResult;
 import com.rupeek.l1.expr.fn.RkFunctions;
 import com.rupeek.l1.intercept.MongoAuditWriter;
 import com.rupeek.l1.model.Resource;
+import com.rupeek.l1.registry.InMemoryResourceProvider;
 import com.rupeek.l1.ops.mongo.MongoTestSupport;
 import com.rupeek.l1.secrets.EnvSecretResolver;
 import com.rupeek.l1.worker.L1Components;
@@ -89,7 +90,7 @@ class AxisDedupeRunTaskTest {
                 "AXIS_PRECHECK_API_KEY", "test-axis-key",
                 "CORE_TOKEN", "test-core-token");
         components = L1Components.create(new L1Components.Settings("local", "classpath:l1-config",
-                Map.of("lendercore", MongoTestSupport.client()), new EnvSecretResolver(env::get), auditWriter,
+                null, Duration.ofSeconds(60), Map.of("lendercore", MongoTestSupport.client()), new EnvSecretResolver(env::get), auditWriter,
                 new SimpleMeterRegistry(), ObservationRegistry.NOOP, env::get, Clock.systemUTC()));
 
         temporal = TestActivityEnvironment.newInstance();
@@ -213,7 +214,7 @@ class AxisDedupeRunTaskTest {
     @Test
     void timeoutAfterSendingIsUnknown() {
         Resource axis = components.resources().resource("axis-precheck");
-        components.resources().put(new Resource(axis.resource(), axis.kind(), axis.auth(), axis.headers(),
+        ((InMemoryResourceProvider) components.resources()).put(new Resource(axis.resource(), axis.kind(), axis.auth(), axis.headers(),
                 new Resource.TimeoutSpec(2000, 300), axis.pool(), axis.env(), null, null, axis.collections()));
         axisReplies(post(urlPathEqualTo(AXIS_PATH)).willReturn(json(200, fixture("axis-dedupe-success.json"))
                 .withFixedDelay(1500)));

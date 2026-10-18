@@ -1,6 +1,6 @@
 # Decision Log — L1-scoped
 
-Companion to [`l1-lld.md`](l1-lld.md). Status as of 2026-10-17.
+Companion to [`l1-lld.md`](l1-lld.md). Status as of 2026-10-18.
 **Decided** = build against it. **Proposed** = default for the POC, open to
 review. **Open** = needs an answer; the default used until then is noted.
 
@@ -37,6 +37,11 @@ review. **Open** = needs an answer; the default used until then is noted.
 | P15 | Single task queue `lih-l1` for the POC | Per-lender queues later if needed |
 | P16 | Secrets from environment variables behind `SecretResolver` | Vault later |
 | P17 | Axis Dedupe: a failed dedupe returns `REJECTED` instead of being logged and ignored (legacy behaviour) | Behaviour change — confirm with product |
+| P18 | Versions are declared in git (missing = 1), immutable once published, and only move forward (gaps allowed) | Replaces "assigned at publish": a recipe's `op@N` pin must be readable in review; gaps let prod skip versions only QA saw |
+| P19 | Registry stores specs as JSON strings; "same content" = SHA-256 of the parsed, key-sorted document without `version` | `$each`/dotted keys are not valid Mongo field names; reformatting is not a change |
+| P20 | Every recipe's highest version needs ≥ 1 golden test, or publish fails | The LLD's 100% golden coverage health signal, enforced |
+| P21 | Redirects apply to recipes only; newest wins; a redirect to the same version undoes | Operations are pinned inside immutable recipes |
+| P22 | CI: PR → `mvn test` + `validate --env qa`; merge → publish QA; manual → publish prod (GitHub environment `l1-prod` with reviewers) | Answers the "how" of Q8 for the POC; who approves prod is still open |
 
 ## Open
 
@@ -55,6 +60,8 @@ review. **Open** = needs an answer; the default used until then is noted.
 | Q11 | Is ~3 lines the right tier-1 limit, enforced at publish? | Expression size cap only |
 | Q12 | `$each`/`$let` in templates, or nested CEL `map()` only? | Support `$each`/`$let` |
 | Q13 | Use Java 21 virtual threads for activity execution? | Platform threads until evaluated in M3 |
+| Q14 | Where do the QA and prod `lih_config` registries live, and who holds `L1_CONFIG_MONGO_URI_QA/PROD`? | Local Mongo (`dev/l1-local`) |
+| Q15 | Retiring old versions: when and how (needs "no open case pins it" from Temporal visibility)? | Never retired; all stored versions compiled at start-up |
 
 ## Rejected alternatives
 

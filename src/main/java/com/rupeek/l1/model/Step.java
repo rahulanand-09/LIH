@@ -1,5 +1,6 @@
 package com.rupeek.l1.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.LinkedHashMap;
@@ -27,6 +28,7 @@ public record Step(
         onError = onError == null ? Map.of() : Map.copyOf(onError);
     }
 
+    @JsonIgnore
     public boolean isReturn() {
         return returnSpec != null;
     }

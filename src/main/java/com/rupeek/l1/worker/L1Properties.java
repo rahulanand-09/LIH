@@ -20,6 +20,7 @@ public class L1Properties {
     private final Temporal temporal = new Temporal();
     private final Audit audit = new Audit();
     private final Dev dev = new Dev();
+    private final Registry registry = new Registry();
 
     public static class Temporal {
         /** Start a Temporal worker polling the task queue. Off in tests that only need the components. */
@@ -56,6 +57,25 @@ public class L1Properties {
         public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
     }
 
+    public static class Registry {
+        /** {@code classpath}: load {@code config-location} (dev/tests). {@code mongo}: published versions. */
+        private String mode = "classpath";
+        /** Connection string for the registry; empty = reuse the application's MongoClient. */
+        private String uri = "";
+        private String database = "lih_config";
+        /** How long a resource read from the registry is cached (resources are live config). */
+        private java.time.Duration resourceTtl = java.time.Duration.ofSeconds(60);
+
+        public String getMode() { return mode; }
+        public void setMode(String mode) { this.mode = mode; }
+        public String getUri() { return uri; }
+        public void setUri(String uri) { this.uri = uri; }
+        public String getDatabase() { return database; }
+        public void setDatabase(String database) { this.database = database; }
+        public java.time.Duration getResourceTtl() { return resourceTtl; }
+        public void setResourceTtl(java.time.Duration resourceTtl) { this.resourceTtl = resourceTtl; }
+    }
+
     public static class Dev {
         /** Register the dev-only {@code L1Probe} workflow on the L1 task queue, to run {@code RunTask} without L2. */
         private boolean probeWorkflow = false;
@@ -75,4 +95,5 @@ public class L1Properties {
     public Temporal getTemporal() { return temporal; }
     public Audit getAudit() { return audit; }
     public Dev getDev() { return dev; }
+    public Registry getRegistry() { return registry; }
 }

@@ -15,8 +15,8 @@ import java.util.Set;
 
 /**
  * Loads config documents from a classpath (or file) location laid out as {@code recipes/}, {@code operations/},
- * {@code resources/}. Git files carry no version, so every recipe and operation is version 1 here; the Mongo
- * registry assigns real versions on publish.
+ * {@code resources/}. A recipe or operation without a {@code version} is version 1. Several versions of one
+ * ref may sit side by side while recipes still pin the older one.
  */
 public final class ClasspathConfigLoader {
 
@@ -30,18 +30,20 @@ public final class ClasspathConfigLoader {
         try {
             List<Recipe> recipes = new ArrayList<>();
             for (var r : resolver.getResources(base + "/recipes/**/*.json")) {
-                recipes.add(ConfigJson.recipe(r.getInputStream(), r.getFilename()).withVersion(1));
+                Recipe doc = ConfigJson.recipe(r.getInputStream(), r.getFilename());
+                recipes.add(doc.version() == null ? doc.withVersion(1) : doc);
             }
             List<OperationDef> operations = new ArrayList<>();
             for (var r : resolver.getResources(base + "/operations/**/*.json")) {
-                operations.add(ConfigJson.operation(r.getInputStream(), r.getFilename()).withVersion(1));
+                OperationDef doc = ConfigJson.operation(r.getInputStream(), r.getFilename());
+                operations.add(doc.version() == null ? doc.withVersion(1) : doc);
             }
             List<Resource> resources = new ArrayList<>();
             for (var r : resolver.getResources(base + "/resources/**/*.json")) {
                 resources.add(ConfigJson.resource(r.getInputStream(), r.getFilename()));
             }
-            unique(recipes.stream().map(Recipe::recipe).toList(), "recipe");
-            unique(operations.stream().map(OperationDef::op).toList(), "operation");
+            unique(recipes.stream().map(d -> d.recipe() + "@" + d.version()).toList(), "recipe");
+            unique(operations.stream().map(d -> d.op() + "@" + d.version()).toList(), "operation");
             unique(resources.stream().map(Resource::resource).toList(), "resource");
             return new LoadedConfig(recipes, operations, resources);
         } catch (IOException e) {

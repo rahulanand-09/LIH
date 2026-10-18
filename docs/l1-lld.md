@@ -111,11 +111,11 @@ All new code lives under `com.rupeek.l1`. No class names a lender.
 | `l1.ops.map` | `MapOperationExecutor` | Templates |
 | `l1.ops.gen` | `GenOperationExecutor` | Stable ids, time |
 | `l1.intercept` | `OperationInterceptor`, `InterceptorChain`, `TracingInterceptor`, `MetricsInterceptor`, `AuditInterceptor`, `AuditWriter`, `PiiMasker` | Cross-cutting concerns |
-| `l1.registry` | `ClasspathConfigLoader`, `StaticRecipeSource`, `InMemoryResourceProvider` (POC); Mongo registry and caches in M4 | Load and serve config versions and resources |
-| `l1.publish` | `Publisher`, `PublishValidator`, `DataflowChecker`, `PublishReport` | Validate and store new versions |
+| `l1.registry` | `ConfigStore` (`MongoConfigStore`, `InMemoryConfigStore`), `StoreRecipeSource`, `StoreResourceProvider`, `RegistryService`, `ConfigCodec`; classpath mode: `ClasspathConfigLoader`, `StaticRecipeSource`, `InMemoryResourceProvider` | Store, load, cache and serve config versions and resources |
+| `l1.publish` | `Publisher`, `ConfigBundle`, `SchemaValidator`, `GoldenRunner`, `GoldenCase`, `PublishReport`; `cli.L1ConfigCli` | Validate (schema, versions, compile, golden) and store new versions; CLI for CI |
 | `l1.secrets` | `SecretResolver`, `EnvSecretResolver` | `secretRef` → value at call time |
 | `l1.worker` | `TaskActivityImpl`, `L1Components` (the single wiring path), `L1AutoConfiguration`, `L1Properties`, `L1TemporalWorker` | Temporal activity + worker start-up |
-| `l1.testkit` (test sources) | `GoldenTestRunner`, `GoldenCase`, `OperationMocks`, `WriteRecorder` | Golden and rerun tests |
+| `l1.dev` | `L1ProbeWorkflow` | Dev-only workflow that calls `RunTask` without L2 (`l1.dev.probe-workflow=true`) |
 
 Dependency direction: `worker → {engine, registry}`; `registry → engine` (implements `RecipeSource`, `ResourceProvider`); `engine → {expr, ops, intercept, model}`; `ops`/`intercept` → `model`/`expr`; `api` depends on nothing. No cycles.
 
@@ -200,7 +200,7 @@ Three document types. JSON. Expressions are CEL strings.
 | Field | Type | Meaning |
 |---|---|---|
 | `recipe` | string | `<lender>.<process>.<step>`, e.g. `axis.precheck.dedupe` |
-| `version` | int | Assigned at publish; absent in git |
+| `version` | int | Declared in git (missing = 1); raised for every change; immutable once published |
 | `lender` | string | For audit/metrics only, never for branching |
 | `resources` | map alias → resource id | Gives recipe-level expressions `env.<alias>.<key>` (optional) |
 | `inputs` | map name → type | Required shape of `TaskRequest.inputs` |
@@ -227,7 +227,7 @@ Types: `string`, `int`, `double`, `bool`, `map`, `list`, `timestamp`, `dyn`.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `op`, `version` | string, int | Reference; version assigned at publish |
+| `op`, `version` | string, int | Reference; version declared in git as for recipes |
 | `kind` | `HTTP` \| `MONGO` \| `MAP` \| `GEN` | Selects the executor |
 | `resource` | resource id | Required for `HTTP`, `MONGO`; optional for `MAP` (to read `env`) |
 | `params` | map name → `{type, pii}` | Inputs; `pii: true` = mask + output-guard |
@@ -269,7 +269,6 @@ The active environment name comes from the worker's configuration (`l1.env`).
 
 ```text
 l1-config/
-  schemas/      recipe.schema.json  operation.schema.json  resource.schema.json
   resources/    axis-precheck.json  core.json  lendercore-mongo.json  rupeekweb.json
   operations/   common/core.fetchCustomerByLoanRequest.json
                 common/precheck.findByLoanRequest.json  common/precheck.upsertInitiated.json
@@ -278,6 +277,10 @@ l1-config/
   recipes/      axis/axis.precheck.dedupe.json
   tests/        axis/axis.precheck.dedupe/*.golden.json
 ```
+
+JSON Schemas live with the code that reads the config, in `src/main/resources/l1-schemas/`
+(`recipe`, `operation`, `resource`, `golden`). The authoring and publishing guide is
+[`l1-config-publishing.md`](l1-config-publishing.md).
 
 ---
 
@@ -553,39 +556,65 @@ Traces: span per task, child span per step, client span per call; workflow id as
 
 ## 12. Registry, publish and versioning
 
-Database `lih_config`.
+Built in M4. Author guide: [`l1-config-publishing.md`](l1-config-publishing.md).
+
+Database `lih_config` (`MongoConfigStore`). Specs are stored as JSON **strings**: config keys such as `$each`
+or dotted names are not valid Mongo field names, and the stored text is exactly what was validated.
 
 | Collection | Key | Holds | Mutable |
 |---|---|---|---|
-| `l1_recipe` | `{ref, version}` unique | spec, `specHash`, `fnLibraryVersion`, `timeoutBudgetMs`, `publishedBy/At`, `reason` | No |
-| `l1_operation` | `{ref, version}` unique | spec + same metadata | No |
-| `l1_pointer` | `ref` | `latest`, move history | Yes (audited) |
-| `l1_resource` | `resource` | resource doc | Yes (audited) |
-| `l1_resource_history` | `{resource, changedAt}` | who / what / why | Append-only |
-| `l1_redirect` | `{ref, fromVersion}` | forced redirect + who/when/why | Append-only |
-| `l1_publish_log` | `publishId` | attempt + validation report | Append-only |
+| `l1_recipe` | `{ref, version}` unique | `spec`, `specHash`, `publishedBy/At`, `reason`, `publishId` | No (duplicate key refused) |
+| `l1_operation` | `{ref, version}` unique | same | No |
+| `l1_pointer` | `_id = TYPE:ref` | `latest`, `history[]` of moves (who, when, why, publishId) | Yes (audited) |
+| `l1_resource` | `_id = resource` | current `spec`, `specHash`, who/when/why | Yes |
+| `l1_resource_history` | `{resource, changedAt}` | every resource write | Append-only |
+| `l1_redirect` | `{ref, fromVersion, at}` | forced redirect + who/when/why; newest wins | Append-only |
+| `l1_publish_log` | `_id = publishId` | every real publish attempt with its full report | Append-only |
 
-### Publish pipeline (`Publisher`, run from CI)
+**Versions** are declared in git (missing = 1). A published `ref@N` never changes. A new version must be higher
+than `latest`. Gaps are allowed, because QA may see versions that prod skips. `specHash` (SHA-256 of the parsed
+document, keys sorted, `version` removed) decides "same content", so reformatting is not a change.
 
-1. JSON Schema validation.
-2. Resolve references (`op@version`, resources, aliases).
-3. Compile every CEL expression in its scope.
-4. Dataflow check: every `steps.<id>.<x>` read is produced earlier on every path; outcomes declared; outputs declared and non-PII.
-5. Kind checks (`OperationExecutor.validate`): URL paths, Mongo operators, collection allowlist.
-6. Golden tests.
-7. `specHash` equal to latest → no-op; else insert `latest + 1`, move pointer.
-8. Publish log entry.
+### Publish pipeline (`Publisher`, run from CI through `L1ConfigCli`)
+
+1. Load the bundle (`ConfigBundle`): strict JSON (duplicate keys rejected), then the JSON Schema
+   (`l1-schemas/*.schema.json`), then strict parsing into the model. Every error is collected, not just the first.
+2. Versions against the registry: an existing `ref@N` must have the same `specHash`; a new one must be higher
+   than `latest`.
+3. Every HTTP resource has a block for the target environment.
+4. Compile with the worker's own `ConfigCompiler` and executors. This covers references (bundle first, then the
+   registry), CEL in every scope, dataflow, declared outcomes and outputs, and kind checks.
+5. Golden tests (`GoldenRunner`). Every recipe's highest version in the bundle needs at least one.
+6. If everything passed and this is a real publish, write in this order:
+   - insert new operation versions;
+   - insert new recipe versions;
+   - move pointers forward (this also repairs a pointer left behind by an interrupted publish);
+   - write changed resources.
+
+   Re-running a publish is safe.
+7. Real publishes (passed or failed) are written to `l1_publish_log`. `validate` and `--dry-run` write nothing.
+
+Offline `validate` (no registry) skips step 2, and then recipes may only pin operations that are in the bundle.
 
 ### Resolution and caching
 
-- At case start L2 calls `RegistryService.resolve(refs)` → pinned versions (redirects applied). L2 passes the pinned `recipeVersion` in `TaskRequest`.
-- Recipes pin operations explicitly (`op@1`).
-- `ConfigCache` (Caffeine): compiled recipes and operations by `ref@version`, no expiry (size-bounded 10,000); resources expire after 60 s; pointers not cached.
-- Start-up compiles every non-retired version and refuses to start on a missing function or kind.
-- A version is retired only when no open case pins it (Temporal visibility query).
+- At case start, L2 calls `RegistryService.resolve(refs)` to get the `latest` version of each recipe. L2 passes
+  the pinned `recipeVersion` in `TaskRequest`.
+- `StoreRecipeSource`:
+  - Compiled recipes and operations are cached by `ref@version` in Caffeine, with no expiry (max 10,000 each), because versions are immutable.
+  - A version published after start-up is loaded and compiled on first use.
+  - `latest` and redirects are read on every call, so a publish or a redirect takes effect immediately, including for open cases on their next step.
+- `StoreResourceProvider`: resources are cached for `l1.registry.resource-ttl` (60 s).
+- Start-up (`warmUp`) compiles every stored recipe version and its operations, and refuses to start if one no
+  longer compiles (for example, a removed `rk.*` function or kind).
+- Redirects apply to recipes only; operations are pinned inside immutable recipes.
 
-POC shortcut (M1–M3): `RegistryService` can load from classpath `l1-config/`
-through the same compile path; Mongo storage arrives in M4.
+`l1.registry.mode=classpath` (the default) keeps the M1–M3 behaviour: it loads `l1.config-location` through the
+same compiler. Use it for local development and tests.
+
+**Not built yet:**
+- retiring old versions: needs a Temporal visibility query to confirm that no open case pins them;
+- storing the `rk.*` library version with each version: start-up compilation covers the main risk.
 
 ---
 
@@ -837,7 +866,7 @@ Expected load is small (≈ 500 cases/day × 10–12 steps).
 | Start-up | Compile all config → refuse to start on errors → start polling |
 | Shutdown | Stop polling; finish running activities up to 60 s |
 | Health | Liveness: process; readiness: config compiled, Mongo + Temporal reachable |
-| Config | `l1.enabled` (default `false`), `l1.env` (`local`/`qa`/`uat`/`prod`), `l1.config-location` (`classpath:l1-config`), `l1.mongo-datasource`, `l1.temporal.{enabled,target,namespace,task-queue,max-concurrent-activities}`, `l1.audit.{enabled,database,queue-capacity}` |
+| Config | `l1.enabled` (default `false`), `l1.env` (`local`/`qa`/`uat`/`prod`), `l1.config-location` (`classpath:l1-config`), `l1.mongo-datasource`, `l1.registry.{mode,uri,database,resource-ttl}`, `l1.temporal.{enabled,target,namespace,task-queue,max-concurrent-activities}`, `l1.audit.{enabled,database,queue-capacity}`, `l1.dev.probe-workflow` |
 | Wiring | `L1AutoConfiguration` is a Spring Boot auto-configuration (no component scan needed) and is off unless `l1.enabled=true`; start-up fails fast if config does not compile or Temporal is unreachable |
 
 ---
@@ -864,6 +893,6 @@ Not done now; listed so nothing is lost.
 1. **Foundations** — `api`, `model`, JSON Schemas, CEL spike, first `rk.*`. *Exit:* every Axis Dedupe expression compiles and evaluates against a recorded response.
 2. **Operation kinds + interceptors** — `HTTP`, `MONGO`, `MAP`, `GEN`; audit, masking, metrics, tracing. *Exit:* executor tests pass (WireMock, Testcontainers).
 3. **Engine + activity** — `RecipeRunner`, classification, `OutputGuard`, `TaskActivityImpl`, worker start-up (classpath registry). *Exit:* `RunTask` runs Axis Dedupe in the Temporal test environment, all failure types covered.
-4. **Registry + tooling** — Mongo registry, caches, publish pipeline, CLI, CI. *Exit:* a merged config change is published to QA by CI.
+4. **Registry + tooling** — Mongo registry, caches, publish pipeline, CLI, CI. *Exit:* a merged config change is published to QA by CI. *Status:* built. Locally verified: publish to `lih_config`, the worker runs a newly published version and a redirect without a restart. The CI workflow is written and needs the QA/prod registry secrets.
 5. **Axis Dedupe** — golden, rerun and parity tests. *Exit:* request bodies match legacy for a sample of past loan requests.
 6. **Rest of Axis precheck** — Timble, callback mapping, status, record result, notify recipes; wire to L2. *Exit:* one Axis precheck end to end in QA against Axis UAT.
