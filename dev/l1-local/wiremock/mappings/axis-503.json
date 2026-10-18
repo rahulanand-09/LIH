@@ -1,0 +1,31 @@
+{
+  "name": "axis 503",
+  "request": {
+    "method": "POST",
+    "urlPath": "/investor_integration/actions/invoke_api",
+    "headers": {
+      "API-key": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "type": {
+        "equalTo": "dedupe"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.customer_id == 'CUST-503')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "message": "stubbed 503"
+    }
+  }
+}

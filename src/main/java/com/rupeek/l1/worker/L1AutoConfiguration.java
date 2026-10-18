@@ -67,6 +67,6 @@ public class L1AutoConfiguration {
     @Bean
     @ConditionalOnProperty(prefix = "l1.temporal", name = "enabled", havingValue = "true", matchIfMissing = true)
     public L1TemporalWorker l1TemporalWorker(L1Properties props, L1Components components) {
-        return new L1TemporalWorker(props.getTemporal(), components.activity());
+        return new L1TemporalWorker(props.getTemporal(), components.activity(), props.getDev().isProbeWorkflow());
     }
 }

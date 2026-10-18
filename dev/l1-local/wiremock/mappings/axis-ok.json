@@ -1,0 +1,29 @@
+{
+  "name": "axis OK",
+  "request": {
+    "method": "POST",
+    "urlPath": "/investor_integration/actions/invoke_api",
+    "headers": {
+      "API-key": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "type": {
+        "equalTo": "dedupe"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.customer_id == 'CUST-OK')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "axis-dedupe-success.json"
+  }
+}

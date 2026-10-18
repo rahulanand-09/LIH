@@ -1,5 +1,6 @@
 package com.rupeek.l1.worker;
 
+import com.rupeek.l1.dev.L1ProbeWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
@@ -23,13 +24,15 @@ public final class L1TemporalWorker implements SmartLifecycle {
 
     private final L1Properties.Temporal settings;
     private final TaskActivityImpl activity;
+    private final boolean probeWorkflow;
     private WorkflowServiceStubs stubs;
     private WorkerFactory factory;
     private volatile boolean running;
 
-    public L1TemporalWorker(L1Properties.Temporal settings, TaskActivityImpl activity) {
+    public L1TemporalWorker(L1Properties.Temporal settings, TaskActivityImpl activity, boolean probeWorkflow) {
         this.settings = settings;
         this.activity = activity;
+        this.probeWorkflow = probeWorkflow;
     }
 
     @Override
@@ -43,6 +46,10 @@ public final class L1TemporalWorker implements SmartLifecycle {
                 .setMaxConcurrentActivityExecutionSize(settings.getMaxConcurrentActivities())
                 .build());
         worker.registerActivitiesImplementations(activity);
+        if (probeWorkflow) {
+            worker.registerWorkflowImplementationTypes(L1ProbeWorkflowImpl.class);
+            LOG.warn("L1 dev probe workflow is registered; do not enable l1.dev.probe-workflow outside local/qa");
+        }
         factory.start();
         running = true;
         LOG.info("L1 worker polling task queue '{}' on {} (namespace {})", settings.getTaskQueue(),

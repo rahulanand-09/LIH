@@ -19,6 +19,7 @@ public class L1Properties {
     private String mongoDatasource = "lendercore";
     private final Temporal temporal = new Temporal();
     private final Audit audit = new Audit();
+    private final Dev dev = new Dev();
 
     public static class Temporal {
         /** Start a Temporal worker polling the task queue. Off in tests that only need the components. */
@@ -55,6 +56,14 @@ public class L1Properties {
         public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
     }
 
+    public static class Dev {
+        /** Register the dev-only {@code L1Probe} workflow on the L1 task queue, to run {@code RunTask} without L2. */
+        private boolean probeWorkflow = false;
+
+        public boolean isProbeWorkflow() { return probeWorkflow; }
+        public void setProbeWorkflow(boolean probeWorkflow) { this.probeWorkflow = probeWorkflow; }
+    }
+
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getEnv() { return env; }
@@ -65,4 +74,5 @@ public class L1Properties {
     public void setMongoDatasource(String mongoDatasource) { this.mongoDatasource = mongoDatasource; }
     public Temporal getTemporal() { return temporal; }
     public Audit getAudit() { return audit; }
+    public Dev getDev() { return dev; }
 }
