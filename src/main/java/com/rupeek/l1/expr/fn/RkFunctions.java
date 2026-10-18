@@ -43,11 +43,13 @@ import java.util.UUID;
  *   <tr><td>{@code rk.mask(v, keepLast)}</td><td>{@code XXXXXX1234}; null stays null</td></tr>
  *   <tr><td>{@code rk.nameSplit(customer, 'first'|'middle'|'last')}</td><td>legacy name rule (see method)</td></tr>
  *   <tr><td>{@code rk.uuidFrom(seed)}</td><td>name-based UUID v5; same seed, same id</td></tr>
+ *   <tr><td>{@code rk.str(v)}</td><td>scalar as a string, null stays null; mirrors a Java {@code String} DTO field
+ *       (a number from upstream is sent as {@code "560001"})</td></tr>
  * </table>
  */
 public final class RkFunctions implements FunctionLibrary {
 
-    public static final String VERSION = "1";
+    public static final String VERSION = "2";
 
     /** Namespace for {@link #uuidFrom(String)} (RFC 4122 URL namespace). */
     private static final UUID UUID_NAMESPACE = UUID.fromString("6ba7b811-9dad-11d1-80b4-00c04fd430c8");
@@ -92,6 +94,7 @@ public final class RkFunctions implements FunctionLibrary {
         add("rk.nameSplit", "rk_nameSplit", dyn, List.of(dyn, str), List.of(Object.class, String.class),
                 a -> nameSplit(map(a[0], "rk.nameSplit"), (String) a[1]));
         add("rk.uuidFrom", "rk_uuidFrom", str, List.of(str), List.of(String.class), a -> uuidFrom((String) a[0]));
+        add("rk.str", "rk_str", dyn, List.of(dyn), List.of(Object.class), a -> str(a[0]));
     }
 
     @Override
@@ -247,6 +250,25 @@ public final class RkFunctions implements FunctionLibrary {
             case "middle" -> middle;
             default -> last;
         };
+    }
+
+    /**
+     * A scalar as a string; null stays null. Whole numbers have no decimal part ({@code 560001}, not
+     * {@code 560001.0}), matching how Jackson fills a {@code String} field from a JSON integer.
+     */
+    public static Object str(Object value) {
+        Object v = unwrap(value);
+        if (v == null || v instanceof String) {
+            return v;
+        }
+        if (v instanceof Double d) {
+            return d == Math.rint(d) && !Double.isInfinite(d) && Math.abs(d) < 1e15
+                    ? Long.toString(d.longValue()) : Double.toString(d);
+        }
+        if (v instanceof Number || v instanceof Boolean) {
+            return v.toString();
+        }
+        throw new IllegalArgumentException("rk.str: expected a scalar, got " + v.getClass().getSimpleName());
     }
 
     /** Name-based UUID version 5 (SHA-1) of {@code seed}: retries that use the same seed send the same id. */

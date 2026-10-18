@@ -98,6 +98,24 @@ mvn -q compile exec:java -Dexec.args="status"
 mvn -q compile exec:java -Dexec.args="redirect --ref axis.precheck.dedupe --from 3 --to 2 --reason 'v3 sends wrong DOB'"
 ```
 
+### Parity against the legacy system
+
+Compares the request a recipe would send with what lendercore logged in `LenderApiAuditLog`:
+- the lender call is mocked, so it is never called;
+- `--live` operations, such as the Core customer fetch, run for real;
+- nothing is written anywhere;
+- values in the report are masked unless you pass `--show-values`.
+
+```bash
+CORE_TOKEN=… mvn -q compile exec:java -Dexec.args="parity --env qa \
+  --audit-uri mongodb://<qa-lendercore> --recipe axis.precheck.dedupe --capture axis.precheck.invoke \
+  --live core.fetchCustomerByLoanRequest --request-type PRECHECK_DEDUPE --lender axis \
+  --ignore client_loan_id --limit 50"
+```
+
+Customer data is read from Core today. A customer who changed (for example) their phone since the logged call
+shows up as a diff on that field. Look for fields that differ across many cases.
+
 | Option | Default |
 |---|---|
 | `--dir` | `src/main/resources/l1-config` |

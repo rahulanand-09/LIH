@@ -4,7 +4,22 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.client.MongoDatabase;
+import com.rupeek.l1.engine.CompiledRecipe;
+import com.rupeek.l1.expr.ExpressionEngine;
+import com.rupeek.l1.model.ConfigJson.ConfigException;
+import com.rupeek.l1.expr.TemplateEvaluator;
+import com.rupeek.l1.ops.OperationRegistry;
 import com.rupeek.l1.publish.ConfigBundle;
+import com.rupeek.l1.publish.GoldenRunner;
+import com.rupeek.l1.publish.parity.AuditSource;
+import com.rupeek.l1.publish.parity.ParityReport;
+import com.rupeek.l1.publish.parity.ParityRunner;
+import com.rupeek.l1.registry.InMemoryResourceProvider;
+import com.rupeek.l1.secrets.EnvSecretResolver;
+import com.rupeek.l1.worker.L1Components;
 import com.rupeek.l1.publish.PublishReport;
 import com.rupeek.l1.publish.Publisher;
 import com.rupeek.l1.publish.SchemaValidator;
@@ -19,6 +34,9 @@ import org.slf4j.LoggerFactory;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +50,13 @@ import java.util.function.Function;
  * publish  --env ENV --reason TEXT [--dir DIR] [--by NAME] [--dry-run] [--mongo-uri URI]
  * status   [--mongo-uri URI]                                   pointers and resources in the registry
  * redirect --ref REF --from N --to M --reason TEXT [--by NAME] [--mongo-uri URI]
+ * parity   --audit-uri URI --env ENV --recipe REF --capture OP --request-type TYPE --lender SLUG
+ *          [--live OP,OP] [--body-param body] [--ignore PATH,PATH] [--limit 20] [--since ISO] [--loan-request-id ID]
+ *          [--audit-db lendercore] [--show-values] [--dir DIR]
  * </pre>
+ * {@code parity} compares the request a recipe would send with what lendercore logged in {@code LenderApiAuditLog}.
+ * The captured operation is mocked (the lender is never called), {@code --live} operations (e.g. the Core customer
+ * fetch) run for real, nothing is written anywhere. Values in the report are masked unless {@code --show-values}.
  *
  * The registry URI comes from {@code --mongo-uri} or {@code L1_CONFIG_MONGO_URI}; the database from
  * {@code --database} (default {@code lih_config}). The publish reason may come from {@code L1_PUBLISH_REASON}
@@ -41,28 +65,38 @@ import java.util.function.Function;
 public final class L1ConfigCli {
 
     static final String DEFAULT_DIR = "src/main/resources/l1-config";
-    private static final Set<String> FLAGS = Set.of("dry-run");
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Set<String> FLAGS = Set.of("dry-run", "show-values");
 
     private final PrintStream out;
     private final Function<String, String> env;
     private final Function<String, ConfigStore> storeFactory;
+    private final Function<String, MongoDatabase> databases;
 
-    L1ConfigCli(PrintStream out, Function<String, String> env, Function<String, ConfigStore> storeFactory) {
+    /**
+     * @param storeFactory {@code uri|database} to registry store
+     * @param databases    {@code uri|database} to a database (parity reads lendercore's audit log)
+     */
+    L1ConfigCli(PrintStream out, Function<String, String> env, Function<String, ConfigStore> storeFactory,
+                Function<String, MongoDatabase> databases) {
         this.out = out;
         this.env = env;
         this.storeFactory = storeFactory;
+        this.databases = databases;
     }
 
     public static void main(String[] args) {
         ((Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME)).setLevel(Level.WARN);
         Map<String, MongoClient> clients = new HashMap<>();
         int code;
+        Function<String, MongoDatabase> databases = uriAndDb -> {
+            int sep = uriAndDb.lastIndexOf('|');
+            MongoClient c = clients.computeIfAbsent(uriAndDb.substring(0, sep), MongoClients::create);
+            return c.getDatabase(uriAndDb.substring(sep + 1));
+        };
         try {
-            code = new L1ConfigCli(System.out, System::getenv, uriAndDb -> {
-                int sep = uriAndDb.lastIndexOf('|');
-                MongoClient c = clients.computeIfAbsent(uriAndDb.substring(0, sep), MongoClients::create);
-                return new MongoConfigStore(c.getDatabase(uriAndDb.substring(sep + 1))).ensureIndexes();
-            }).run(args);
+            code = new L1ConfigCli(System.out, System::getenv,
+                    key -> new MongoConfigStore(databases.apply(key)).ensureIndexes(), databases).run(args);
         } finally {
             clients.values().forEach(MongoClient::close);
         }
@@ -85,10 +119,14 @@ public final class L1ConfigCli {
                 case "publish" -> publish(opts);
                 case "status" -> status(opts);
                 case "redirect" -> redirect(opts);
+                case "parity" -> parity(opts);
                 default -> usage("unknown command '" + args[0] + "'");
             };
         } catch (UsageException e) {
             return usage(e.getMessage());
+        } catch (ConfigException e) {
+            out.println("error: " + e.getMessage());
+            return 2;
         }
     }
 
@@ -150,6 +188,78 @@ public final class L1ConfigCli {
                 ? "cleared redirects for " + ref + "@" + from
                 : "redirected " + ref + "@" + from + " -> @" + to + " (applies to open cases on their next step)");
         return 0;
+    }
+
+    private int parity(Map<String, String> o) {
+        String envName = required(o, "env");
+        String recipeRef = required(o, "recipe");
+        String capture = required(o, "capture");
+        String requestType = required(o, "request-type");
+        String lender = required(o, "lender");
+        String auditUri = required(o, "audit-uri");
+        Set<String> live = list(o.get("live"));
+        Set<String> ignore = list(o.get("ignore"));
+        int limit = o.containsKey("limit") ? number(o, "limit") : 20;
+        Instant since;
+        try {
+            since = o.containsKey("since") ? Instant.parse(o.get("since")) : null;
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new UsageException("--since must be an ISO instant, e.g. 2026-10-01T00:00:00Z");
+        }
+
+        List<String> errors = new ArrayList<>();
+        Publisher.Compiled compiled = new Publisher(new InMemoryConfigStore(), true, Clock.systemUTC())
+                .compile(bundle(o), envName, errors);
+        CompiledRecipe recipe = compiled.recipe(recipeRef);
+        if (!errors.isEmpty() || recipe == null) {
+            errors.forEach(e -> out.println("error: " + e));
+            out.println(recipe == null ? "recipe " + recipeRef + " is not in the bundle" : "config does not compile");
+            return 1;
+        }
+        ExpressionEngine expressions = L1Components.standardExpressions();
+        TemplateEvaluator templates = new TemplateEvaluator(expressions);
+        OperationRegistry mocked = L1Components.standardOperations(templates, Map.of(), ref -> {
+            throw new IllegalStateException("not used");
+        });
+        OperationRegistry liveOps = L1Components.standardOperations(templates, Map.of(), new EnvSecretResolver(env));
+        ParityRunner runner = new ParityRunner(new GoldenRunner(expressions, mocked), recipe,
+                new InMemoryResourceProvider(compiled.resources(), envName, env), liveOps, live, capture,
+                o.getOrDefault("body-param", "body"), ignore);
+
+        List<AuditSource.Sample> samples = new AuditSource(
+                databases.apply(auditUri + "|" + o.getOrDefault("audit-db", "lendercore")))
+                .samples(lender, requestType, o.get("loan-request-id"), since, limit);
+        out.println("parity " + recipe.ref() + "@" + recipe.version() + " vs " + requestType + " (" + samples.size()
+                + " samples, captured " + runner.captureRef() + ", live " + live + ", ignoring " + ignore + ")");
+        List<ParityRunner.CaseResult> results = new ArrayList<>();
+        for (AuditSource.Sample s : samples) {
+            JsonNode legacy;
+            try {
+                legacy = JSON.readTree(s.requestPayload());
+            } catch (java.io.IOException e) {
+                results.add(new ParityRunner.CaseResult(s.loanRequestId(), ParityRunner.Status.ERROR, List.of(),
+                        "logged payload is not JSON (truncated at 10,000 chars?)"));
+                continue;
+            }
+            results.add(runner.check(s.loanRequestId(), Map.of("loanRequestId", s.loanRequestId(), "runNo", 1),
+                    Map.of(), legacy));
+        }
+        out.print(ParityReport.text(results, o.containsKey("show-values")));
+        out.println("note: customer data is read from Core today; a field changed since the logged call shows as a diff");
+        return results.stream().allMatch(r -> r.status() == ParityRunner.Status.MATCH) ? 0 : 1;
+    }
+
+    private static Set<String> list(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return Set.of();
+        }
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (String s : csv.split(",")) {
+            if (!s.isBlank()) {
+                out.add(s.trim());
+            }
+        }
+        return out;
     }
 
     private ConfigBundle bundle(Map<String, String> o) {
@@ -224,6 +334,9 @@ public final class L1ConfigCli {
                   publish  --env ENV --reason TEXT [--dir DIR] [--by NAME] [--dry-run] [--mongo-uri URI]
                   status   [--mongo-uri URI]
                   redirect --ref REF --from N --to M --reason TEXT [--by NAME] [--mongo-uri URI]
+                  parity   --audit-uri URI --env ENV --recipe REF --capture OP --request-type TYPE --lender SLUG
+                           [--live OP,OP] [--ignore PATH,PATH] [--limit N] [--since ISO] [--loan-request-id ID]
+                           [--body-param body] [--audit-db lendercore] [--show-values] [--dir DIR]
                 registry: --mongo-uri or L1_CONFIG_MONGO_URI; --database (default lih_config)""");
         return 2;
     }

@@ -98,7 +98,51 @@ public final class Publisher {
         versionItems(DocType.OPERATION, bundle.operations(), d -> d.op(), d -> d.version(), errors, items);
         versionItems(DocType.RECIPE, bundle.recipes(), d -> d.recipe(), d -> d.version(), errors, items);
 
-        // 3. resources: registry resources overlaid with the bundle's
+        // 3 + 4. resources and compile
+        Compiled compiled = compile(bundle, env, errors, items);
+        Map<String, CompiledRecipe> recipes = compiled.recipes();
+        InMemoryResourceProvider provider = new InMemoryResourceProvider(compiled.resources(), env, name -> NO_HOST);
+        Map<String, Resource> resources = compiled.resources();
+
+        // 5. golden tests
+        List<GoldenResult> goldens = runGoldens(bundle, recipes, provider, errors);
+
+        boolean passed = errors.isEmpty() && goldens.stream().allMatch(GoldenResult::passed);
+        boolean written = false;
+        if (passed && mode == Mode.PUBLISH) {
+            write(bundle, items, resources, publishId, by, reason, at);
+            written = true;
+        }
+        PublishReport report = new PublishReport(publishId, mode, env, by, reason, at, items, errors, goldens, written);
+        if (mode == Mode.PUBLISH) {
+            store.logPublish(report.toLog());
+        }
+        return report;
+    }
+
+    /**
+     * Compiled bundle: recipes by {@code ref@version} and the resources they run against (registry resources
+     * overlaid with the bundle's).
+     */
+    public record Compiled(Map<String, CompiledRecipe> recipes, Map<String, Resource> resources) {
+
+        /** {@code ref@version}, or the highest version of {@code ref} in the bundle; null if absent. */
+        public CompiledRecipe recipe(String refOrPinned) {
+            int at = refOrPinned.lastIndexOf('@');
+            if (at > 0) {
+                return recipes.get(refOrPinned);
+            }
+            return recipes.values().stream().filter(r -> r.ref().equals(refOrPinned))
+                    .max(Comparator.comparingInt(CompiledRecipe::version)).orElse(null);
+        }
+    }
+
+    /** Steps 3 and 4 alone: resource checks and compilation. Errors are added to {@code errors}. */
+    public Compiled compile(ConfigBundle bundle, String env, List<String> errors) {
+        return compile(bundle, env, errors, new ArrayList<>());
+    }
+
+    private Compiled compile(ConfigBundle bundle, String env, List<String> errors, List<Item> items) {
         Map<String, Resource> resources = new HashMap<>();
         if (!offline) {
             store.resources().forEach(r -> resources.put(r.resource(), ConfigCodec.resource(r)));
@@ -114,10 +158,9 @@ public final class Publisher {
             items.add(new Item("RESOURCE", r.resource(), null, resourceAction(r), d.source()));
             resources.put(r.resource(), r);
         }
-        InMemoryResourceProvider provider = new InMemoryResourceProvider(resources, env, name -> NO_HOST);
-        ConfigCompiler compiler = new ConfigCompiler(expressions, operations, provider);
+        ConfigCompiler compiler = new ConfigCompiler(expressions, operations,
+                new InMemoryResourceProvider(resources, env, name -> NO_HOST));
 
-        // 4. compile
         Map<OpRef, CompiledOperation> ops = new HashMap<>();
         for (Doc<OperationDef> d : bundle.operations()) {
             try {
@@ -137,21 +180,7 @@ public final class Publisher {
                 errors.add(d.source() + ": " + e.getMessage());
             }
         }
-
-        // 5. golden tests
-        List<GoldenResult> goldens = runGoldens(bundle, recipes, provider, errors);
-
-        boolean passed = errors.isEmpty() && goldens.stream().allMatch(GoldenResult::passed);
-        boolean written = false;
-        if (passed && mode == Mode.PUBLISH) {
-            write(bundle, items, resources, publishId, by, reason, at);
-            written = true;
-        }
-        PublishReport report = new PublishReport(publishId, mode, env, by, reason, at, items, errors, goldens, written);
-        if (mode == Mode.PUBLISH) {
-            store.logPublish(report.toLog());
-        }
-        return report;
+        return new Compiled(recipes, Map.copyOf(resources));
     }
 
     private <T> void versionItems(DocType type, List<Doc<T>> docs, Function<T, String> refOf,

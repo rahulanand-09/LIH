@@ -28,7 +28,7 @@ review. **Open** = needs an answer; the default used until then is noted.
 | P6 | Executors do I/O only; all CEL evaluation, checks and classification in the engine | Uniform behaviour across kinds |
 | P7 | Templates: `=` prefix for CEL leaves; `$each` / `$let` for nested lists | Keeps large payloads readable |
 | P8 | Tier rule: CEL → `rk.*` → `CODE` op → operation kind | Health signals: `CODE` share < 10%, expression cap, 100% golden coverage |
-| P9 | `rk.*` POC set: `round`, `sum`, `groupSum`, `groupCount`, `lookup`, `json`, `parseJson`, `date.parse`, `date.format`, `mask`, `nameSplit`, `uuidFrom` | Library versioned; functions only added or fixed |
+| P9 | `rk.*` POC set: `round`, `sum`, `groupSum`, `groupCount`, `lookup`, `json`, `parseJson`, `date.parse`, `date.format`, `mask`, `nameSplit`, `uuidFrom`, `str` (added in M5) | Library versioned (now `2`); functions only added or fixed |
 | P10 | Audit as an interceptor writing the existing `LenderApiAuditLog` | Only existing `ApiRequestType` values until lendercore adds more |
 | P11 | Config in git → CI validate + golden tests → publish to Mongo `lih_config`; versions immutable, pinned per case | Classpath loading allowed until M4 |
 | P12 | No step journal; recipes written rerun-safe (check, reuse ids, upsert before call) | Journal only if a recipe cannot be made rerun-safe |
@@ -41,6 +41,8 @@ review. **Open** = needs an answer; the default used until then is noted.
 | P19 | Registry stores specs as JSON strings; "same content" = SHA-256 of the parsed, key-sorted document without `version` | `$each`/dotted keys are not valid Mongo field names; reformatting is not a change |
 | P20 | Every recipe's highest version needs ≥ 1 golden test, or publish fails | The LLD's 100% golden coverage health signal, enforced |
 | P21 | Redirects apply to recipes only; newest wins; a redirect to the same version undoes | Operations are pinned inside immutable recipes |
+| P23 | Parity oracle = a test-only, verbatim copy of the legacy mapping (`LegacyAxisPrecheckMapping`), plus a live `parity` command against `LenderApiAuditLog` | Parity can be proven before QA access; the live run then confirms on real data |
+| P24 | `client_loan_id` differs from legacy by design: legacy sends a new random UUID on every call; L1 sends a stable id (UUIDv5 of loanRequestId + runNo) and reuses the stored one on reruns | Rerun safety; ignored by parity |
 | P22 | CI: PR → `mvn test` + `validate --env qa`; merge → publish QA; manual → publish prod (GitHub environment `l1-prod` with reviewers) | Answers the "how" of Q8 for the POC; who approves prod is still open |
 
 ## Open
@@ -61,6 +63,7 @@ review. **Open** = needs an answer; the default used until then is noted.
 | Q12 | `$each`/`$let` in templates, or nested CEL `map()` only? | Support `$each`/`$let` |
 | Q13 | Use Java 21 virtual threads for activity execution? | Platform threads until evaluated in M3 |
 | Q14 | Where do the QA and prod `lih_config` registries live, and who holds `L1_CONFIG_MONGO_URI_QA/PROD`? | Local Mongo (`dev/l1-local`) |
+| Q16 | On a revert (`runNo` + 1) after a REJECTED dedupe, should Axis get a new `client_loan_id`? Today the recipe reuses the stored id whatever the `runNo` (legacy: always a new random id) | Reuse stored id; one-line change to derive it from `runNo` only (see M5 notes) |
 | Q15 | Retiring old versions: when and how (needs "no open case pins it" from Temporal visibility)? | Never retired; all stored versions compiled at start-up |
 
 ## Rejected alternatives

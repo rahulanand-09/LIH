@@ -25,6 +25,8 @@ class L1ConfigCliTest {
         L1ConfigCli cli = new L1ConfigCli(new PrintStream(buffer, true, StandardCharsets.UTF_8), env::get, key -> {
             lastStoreKey = key;
             return store;
+        }, key -> {
+            throw new UnsupportedOperationException("no databases in this test");
         });
         return cli.run(args);
     }

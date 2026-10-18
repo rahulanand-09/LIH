@@ -820,9 +820,9 @@ question (see decision log, Q5). Until confirmed, `axis.precheck.invoke` is
 | Executor | WireMock, Testcontainers Mongo | HTTP timeouts/status/auth; Mongo actions, `expect`, forbidden operators |
 | Engine | In-memory registry, `OperationMocks` | Guards, early return, `onError`, failure types |
 | Activity | Temporal test environment | `RunTask` end to end; `ApplicationFailure` types; heartbeats |
-| Golden | `GoldenTestRunner` | Inputs + mocked ops → outcome, outputs, calls, writes |
-| Rerun | `GoldenTestRunner` + forced failure after each step | No duplicate side effect; same ids |
-| Parity | Replay from `LenderApiAuditLog` | Request bodies match legacy field by field |
+| Golden | `GoldenRunner` (publish step; files under `l1-config/tests/`) | Inputs + mocked ops → outcome, outputs, calls; required for every recipe |
+| Rerun | `AxisDedupeRerunTest`: real Mongo + WireMock, worker "dies" right after each operation's side effect, then the same `RunTask` reruns | One document, one `client_loan_id` in every lender call, right outcome, second lender call only after a crash between call and save |
+| Parity | (1) `AxisDedupeParityTest`: test-only copy of the legacy mapping as oracle, 18+ customer shapes; (2) `L1ConfigCli parity`: legacy bodies from `LenderApiAuditLog`, customers re-read from Core, lender mocked | Request bodies match legacy field by field (`JsonDiff`: key order ignored, missing ≠ null) |
 | Contract | Lender UAT | Real call before go-live / after lender API change |
 
 Golden file:
@@ -894,5 +894,5 @@ Not done now; listed so nothing is lost.
 2. **Operation kinds + interceptors** — `HTTP`, `MONGO`, `MAP`, `GEN`; audit, masking, metrics, tracing. *Exit:* executor tests pass (WireMock, Testcontainers).
 3. **Engine + activity** — `RecipeRunner`, classification, `OutputGuard`, `TaskActivityImpl`, worker start-up (classpath registry). *Exit:* `RunTask` runs Axis Dedupe in the Temporal test environment, all failure types covered.
 4. **Registry + tooling** — Mongo registry, caches, publish pipeline, CLI, CI. *Exit:* a merged config change is published to QA by CI. *Status:* built. Locally verified: publish to `lih_config`, the worker runs a newly published version and a redirect without a restart. The CI workflow is written and needs the QA/prod registry secrets.
-5. **Axis Dedupe** — golden, rerun and parity tests. *Exit:* request bodies match legacy for a sample of past loan requests.
+5. **Axis Dedupe** — golden, rerun and parity tests. *Exit:* request bodies match legacy for a sample of past loan requests. *Status:* built. Parity found and fixed three differences (`application_id: null` missing; numeric phone/pincode sent as numbers instead of strings). It matches the legacy oracle on every customer shape, and matches one real QA payload apart from `client_loan_id` (different by design). Still to do: run `parity` on a QA sample (needs Core QA token + read access to QA `LenderApiAuditLog`).
 6. **Rest of Axis precheck** — Timble, callback mapping, status, record result, notify recipes; wire to L2. *Exit:* one Axis precheck end to end in QA against Axis UAT.

@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -62,7 +63,24 @@ public final class GoldenRunner {
         }
     }
 
-    record Call(String op, Map<String, Object> params) {
+    /** One operation call as the engine made it ({@code params} after evaluation). */
+    public record Call(String op, Map<String, Object> params) {
+    }
+
+    /**
+     * What happened in one run, before any expectation is checked.
+     *
+     * @param failure      L1 failure type name when the recipe failed, else null
+     * @param missingMocks HTTP operations that ran without a mock (the run stops at the first)
+     * @param error        unexpected exception, else null
+     */
+    public record Run(TaskResult result, String failure, String failureMessage, List<Call> calls,
+                      List<String> missingMocks, String error) {
+
+        /** The first call to an operation of that name (any version), or null. */
+        public Call firstCall(String opName) {
+            return calls.stream().filter(c -> c.op().startsWith(opName + "@")).findFirst().orElse(null);
+        }
     }
 
     private final ExpressionEngine expressions;
@@ -74,10 +92,31 @@ public final class GoldenRunner {
     }
 
     public GoldenResult run(String source, GoldenCase c, CompiledRecipe recipe, ResourceProvider resources) {
+        Run run = execute(c, recipe, resources, null, Set.of());
+        List<String> problems = new ArrayList<>();
+        if (run.failure() != null && c.expect().failure() == null) {
+            problems.add("failed with " + run.failure() + ": " + run.failureMessage());
+        }
+        if (run.error() != null) {
+            problems.add("internal error: " + run.error());
+        }
+        run.missingMocks().forEach(op -> problems.add("no mock for HTTP operation " + op));
+        check(c.expect(), run.result(), run.failure(), run.calls(), problems);
+        return new GoldenResult(c.name(), source, List.copyOf(problems));
+    }
+
+    /**
+     * Runs a case and returns what happened. Operations named in {@code live} (e.g.
+     * {@code core.fetchCustomerByLoanRequest@1}) run on {@code liveOperations} for real instead of being mocked;
+     * the parity tool uses this to read real customers while never calling a lender.
+     */
+    public Run execute(GoldenCase c, CompiledRecipe recipe, ResourceProvider resources,
+                       OperationRegistry liveOperations, Set<String> live) {
         Recording rec = new Recording(c.mocks());
         List<OperationExecutor> executors = new ArrayList<>();
         for (OperationKind kind : OperationKind.values()) {
-            executors.add(new GoldenExecutor(realOperations.executor(kind), rec));
+            executors.add(new GoldenExecutor(realOperations.executor(kind),
+                    liveOperations == null ? null : liveOperations.executor(kind), live, rec));
         }
         OperationRegistry operations = new OperationRegistry(executors);
         Instant now = c.now() == null ? DEFAULT_NOW : Instant.parse(c.now());
@@ -93,34 +132,28 @@ public final class GoldenRunner {
                 return recipe.version();
             }
         };
-        SimpleMeterRegistry meters = new SimpleMeterRegistry();
         OperationInvoker invoker = new OperationInvoker(operations, resources, new InterceptorChain(List.of()),
                 expressions, new ErrorClassifier());
         RecipeRunner runner = new RecipeRunner(single, resources, invoker, expressions, new OutputGuard(),
-                new PiiMasker(), meters, clock);
+                new PiiMasker(), new SimpleMeterRegistry(), clock);
 
         int runNo = c.runNo() == null ? 1 : c.runNo();
         TaskRequest request = new TaskRequest(recipe.ref(), recipe.version(), "golden:" + c.name(), runNo, c.input());
-        List<String> problems = new ArrayList<>();
         TaskResult result = null;
         String failure = null;
+        String failureMessage = null;
+        String error = null;
         try {
             result = runner.run(request, RecipeRunner.Heartbeat.NONE);
         } catch (L1Failure f) {
             failure = f.errorClass().failureType().name();
-            if (c.expect().failure() == null) {
-                problems.add("failed with " + failure + ": " + f.getMessage());
-            }
+            failureMessage = f.getMessage();
         } catch (MissingMock m) {
-            // reported from rec.missing below
+            // reported through missingMocks
         } catch (RuntimeException e) {
-            problems.add("internal error: " + e);
+            error = e.toString();
         }
-        if (!rec.missing.isEmpty()) {
-            rec.missing.forEach(op -> problems.add("no mock for HTTP operation " + op));
-        }
-        check(c.expect(), result, failure, rec.calls, problems);
-        return new GoldenResult(c.name(), source, List.copyOf(problems));
+        return new Run(result, failure, failureMessage, List.copyOf(rec.calls), List.copyOf(rec.missing), error);
     }
 
     private static void check(GoldenCase.Expect expect, TaskResult result, String failure, List<Call> calls,
@@ -220,10 +253,14 @@ public final class GoldenRunner {
     /** Wraps the real executor of one kind: validation is real, execution is mocked or recorded. */
     private static final class GoldenExecutor implements OperationExecutor {
         private final OperationExecutor real;
+        private final OperationExecutor liveExecutor;
+        private final Set<String> live;
         private final Recording rec;
 
-        GoldenExecutor(OperationExecutor real, Recording rec) {
+        GoldenExecutor(OperationExecutor real, OperationExecutor liveExecutor, Set<String> live, Recording rec) {
             this.real = real;
+            this.liveExecutor = liveExecutor;
+            this.live = live;
             this.rec = rec;
         }
 
@@ -243,6 +280,9 @@ public final class GoldenRunner {
             OperationDef def = op.def();
             String ref = def.op() + "@" + def.version();
             rec.calls.add(new Call(ref, params));
+            if (liveExecutor != null && live.contains(ref)) {
+                return liveExecutor.execute(op, params, ctx);
+            }
             Map<String, Object> mock = rec.mocks.get(ref);
             if (mock != null) {
                 return answer(mock, ctx);
