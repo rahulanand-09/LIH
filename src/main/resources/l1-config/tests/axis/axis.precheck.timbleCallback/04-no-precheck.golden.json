@@ -1,0 +1,22 @@
+{
+  "name": "timble callback: no precheck for the customer: nothing written",
+  "recipe": "axis.precheck.timbleCallback",
+  "input": {
+    "event": {
+      "product_id": "P1",
+      "customer_id": "CUST-TEST-1",
+      "timble_status": "COMPLETED",
+      "name_match": "Y",
+      "aadhar_match": "Y"
+    }
+  },
+  "expect": {
+    "outcome": "NO_PRECHECK",
+    "out": {
+      "timbleOk": true
+    },
+    "notCalled": [
+      "axis.precheck.saveTimbleStatus@1"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "name": "status: all four flags Y and Timble passed: SUCCESS, approved, audit outcome",
+  "recipe": "axis.precheck.status",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1"
+  },
+  "mocks": {
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "customerId": "CUST-TEST-1",
+        "applicantId": "APP-TEST-9",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "responseMap": {
+          "timble": {
+            "status": "SUCCESS",
+            "statusMessage": "Timble Precheck Successful"
+          }
+        }
+      }
+    },
+    "axis.precheck.status@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "dedupe": "Y",
+          "pan": "Y",
+          "ramp": "Y",
+          "hunter": "Y"
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "SUCCESS",
+    "out": {
+      "dedupe": "Y",
+      "timble": "Y"
+    },
+    "calls": {
+      "axis.precheck.status@1": {
+        "params.body.application_id": "APP-TEST-9",
+        "params.body.client_loan_id": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "params.body.customer_id": "CUST-TEST-1",
+        "params.body.model_name": "CLM1",
+        "params.body.first_name": null,
+        "params.body.address": null
+      },
+      "axis.precheck.saveStatusFinal@1": {
+        "params.approved": true,
+        "params.overall.status": "SUCCESS",
+        "params.overall.statusMessage": "PreCheck success for the loanRequest",
+        "params.pan.status": "SUCCESS",
+        "params.pan.statusMessage": ""
+      },
+      "precheck.audit.recordOutcome@1": {
+        "params.status": "success",
+        "params.remarks": "PreCheck success for the loanRequest"
+      }
+    },
+    "notCalled": [
+      "axis.precheck.saveStatusPending@1"
+    ]
+  }
+}

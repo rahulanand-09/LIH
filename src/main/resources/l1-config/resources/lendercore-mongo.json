@@ -3,5 +3,8 @@
   "kind": "MONGO",
   "datasourceRef": "lendercore",
   "database": "lendercore",
-  "collections": ["LenderCustomerPrecheck"]
+  "collections": [
+    "LenderCustomerPrecheck",
+    "LenderCustomerPrecheckAudit"
+  ]
 }

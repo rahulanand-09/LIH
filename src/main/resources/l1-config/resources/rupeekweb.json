@@ -1,0 +1,39 @@
+{
+  "resource": "rupeekweb",
+  "kind": "HTTP",
+  "auth": {
+    "type": "API_KEY_HEADER",
+    "header": "Authorization",
+    "secretRef": "RUPEEKWEB_ADMIN_TOKEN"
+  },
+  "timeoutMs": {
+    "connect": 10000,
+    "read": 120000
+  },
+  "pool": {
+    "maxConnections": 10
+  },
+  "env": {
+    "local": {
+      "baseUrlRef": "RUPEEKWEB_BASEURL",
+      "values": {
+        "precheckVerificationPath": "/api/loanrequest/precheck-verification",
+        "precheckFailurePath": "/api/lender/updateprecheckfailure"
+      }
+    },
+    "qa": {
+      "baseUrl": "https://rupeekwebsvc-qa.rupeek.co",
+      "values": {
+        "precheckVerificationPath": "/api/loanrequest/precheck-verification",
+        "precheckFailurePath": "/api/lender/updateprecheckfailure"
+      }
+    },
+    "prod": {
+      "baseUrl": "https://rupeekwebsvc.rupeek.com",
+      "values": {
+        "precheckVerificationPath": "/api/loanrequest/precheck-verification",
+        "precheckFailurePath": "/api/lender/updateprecheckfailure"
+      }
+    }
+  }
+}

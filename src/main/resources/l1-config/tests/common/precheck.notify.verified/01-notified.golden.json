@@ -1,0 +1,26 @@
+{
+  "name": "notify verified: posted",
+  "recipe": "precheck.notify.verified",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1"
+  },
+  "mocks": {
+    "rupeekweb.precheck.verification@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "ok": true
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "NOTIFIED",
+    "calls": {
+      "rupeekweb.precheck.verification@1": {
+        "params.loanRequestId": "LR-GOLDEN-1",
+        "params.approved": true
+      }
+    }
+  }
+}

@@ -636,6 +636,8 @@ same compiler. Use it for local development and tests.
 
 ## 14. Worked example: Axis Dedupe
 
+> Written for M1–M3. The current recipe adds a new `client_loan_id` per attempt and lendercore's skip and re-run rules, and the rest of the Axis precheck is now built: see [`l1-axis-precheck.md`](l1-axis-precheck.md).
+
 ### Steps
 
 | # | Step | Operation (kind) | Does | Legacy reference (lendercore) |
@@ -877,11 +879,11 @@ Not done now; listed so nothing is lost.
 
 | Touchpoint | L1 position |
 |---|---|
-| Activity contract | L2 calls `RunTask(TaskRequest)` and routes on `TaskResult.outcome` |
+| Activity contract | L2 calls `RunTask(TaskRequest)` and routes on `TaskResult.outcome`; `ResolveRecipes` pins versions at case start (built in M6; see [`l1-for-l2.md`](l1-for-l2.md)) |
 | Task queue | L1 proposes `lih-l1`; align with L2's queue strategy |
-| Decision logic in L2 (`DECIDE` over raw lender fields) | Moves into L1 recipes as outcomes (e.g. status roll-up, Timble rule) |
-| Callbacks | L2 receives the event, calls an L1 mapping recipe with `inputs.event` |
-| Persist / notify sinks | Become L1 recipes using `MONGO` / `HTTP` operations |
+| Decision logic in L2 (`DECIDE` over raw lender fields) | Moved into L1 recipes as outcomes (M6: `axis.precheck.status`, `axis.precheck.timbleCallback`) |
+| Callbacks | L2 receives the event, calls `axis.precheck.timbleCallback` with `inputs.event`; its output `loanRequestId` identifies the case |
+| Persist / notify sinks | Built as L1 recipes (M6): saves inside the Axis recipes, `precheck.notify.verified` / `precheck.notify.failed` |
 | Expression language | L1 is CEL; L2 converging on CEL avoids two evaluators |
 | Version pinning | L2 manifest calls `RegistryService.resolve` at case start |
 | Error handling | L2 maps `L1_*` failure types to retry / park / fail |
@@ -895,4 +897,4 @@ Not done now; listed so nothing is lost.
 3. **Engine + activity** — `RecipeRunner`, classification, `OutputGuard`, `TaskActivityImpl`, worker start-up (classpath registry). *Exit:* `RunTask` runs Axis Dedupe in the Temporal test environment, all failure types covered.
 4. **Registry + tooling** — Mongo registry, caches, publish pipeline, CLI, CI. *Exit:* a merged config change is published to QA by CI. *Status:* built. Locally verified: publish to `lih_config`, the worker runs a newly published version and a redirect without a restart. The CI workflow is written and needs the QA/prod registry secrets.
 5. **Axis Dedupe** — golden, rerun and parity tests. *Exit:* request bodies match legacy for a sample of past loan requests. *Status:* built. Parity found and fixed three differences (`application_id: null` missing; numeric phone/pincode sent as numbers instead of strings). It matches the legacy oracle on every customer shape, and matches one real QA payload apart from `client_loan_id` (different by design). Still to do: run `parity` on a QA sample (needs Core QA token + read access to QA `LenderApiAuditLog`).
-6. **Rest of Axis precheck** — Timble, callback mapping, status, record result, notify recipes; wire to L2. *Exit:* one Axis precheck end to end in QA against Axis UAT.
+6. **Rest of Axis precheck** — Timble, callback mapping, status, record result, notify recipes; wire to L2. *Exit:* one Axis precheck end to end in QA against Axis UAT. *Status:* recipes built (six, see [`l1-axis-precheck.md`](l1-axis-precheck.md)). Parity with the legacy logic is tested, and the full flow runs end to end through a reference L2 workflow (`ReferenceAxisPrecheckFlowTest`) and on local Temporal. L2 wiring is documented in [`l1-for-l2.md`](l1-for-l2.md). Still to do: L2 adopts it, then a QA run against Axis UAT.

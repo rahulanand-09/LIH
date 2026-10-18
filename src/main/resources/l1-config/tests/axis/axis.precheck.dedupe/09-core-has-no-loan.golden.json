@@ -1,9 +1,10 @@
 {
-  "name": "Core knows no loan for the request: PERMANENT, Axis not called",
+  "name": "dedupe: Core knows no loan for the request: PERMANENT, Axis not called",
   "recipe": "axis.precheck.dedupe",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {

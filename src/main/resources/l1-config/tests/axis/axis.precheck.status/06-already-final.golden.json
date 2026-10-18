@@ -1,0 +1,38 @@
+{
+  "name": "status: already SUCCESS: Axis not called again",
+  "recipe": "axis.precheck.status",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1"
+  },
+  "mocks": {
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "customerId": "CUST-TEST-1",
+        "applicantId": "APP-TEST-9",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "responseMap": {
+          "timble": {
+            "status": "SUCCESS",
+            "statusMessage": "Timble Precheck Successful"
+          },
+          "axisPreCheckStatus": {
+            "status": "SUCCESS",
+            "statusMessage": "m"
+          }
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "ALREADY_FINAL",
+    "out": {
+      "finalStatus": "SUCCESS"
+    },
+    "notCalled": [
+      "axis.precheck.status@1",
+      "axis.precheck.saveStatusFinal@1",
+      "axis.precheck.saveStatusPending@1"
+    ]
+  }
+}

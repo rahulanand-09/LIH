@@ -178,40 +178,38 @@ class AxisDedupeExpressionsTest {
     // ------------------------------------------------------------------ recipe expressions
 
     @Test
-    void alreadyDoneGuardOnlyFiresForACompletedRecord() {
+    void alreadyDoneGuardOnlyFiresForThisAttemptsCompletedRecord() {
         CompiledExpr when = compile(step("alreadyDone").when(), ScopeDecl.STEP);
+        Map<String, Object> ids = Map.of("value", "CLID-1");
 
         Map<String, Object> completed = new HashMap<>();
         completed.put("applicantId", "APP-1");
-        completed.put("client_loan_id", "CLID-1");
-        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", existing(completed))))).isTrue();
+        completed.put("clientLoanId", "CLID-1");
+        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", existing(completed), "ids", ids)))).isTrue();
 
-        Map<String, Object> half = new HashMap<>();          // dedupe failed or crashed earlier
-        half.put("applicantId", null);
-        half.put("client_loan_id", "CLID-1");
-        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", existing(half))))).isFalse();
+        Map<String, Object> earlierAttempt = new HashMap<>(completed);   // a revert: new attempt, new id
+        earlierAttempt.put("clientLoanId", "CLID-OLD");
+        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", existing(earlierAttempt), "ids", ids)))).isFalse();
+
+        Map<String, Object> noApplicant = new HashMap<>(completed);
+        noApplicant.put("applicantId", null);
+        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", existing(noApplicant), "ids", ids)))).isFalse();
 
         Map<String, Object> notFound = new HashMap<>();
         notFound.put("found", false);
         notFound.put("doc", null);
-        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", notFound)))).isFalse();
+        assertThat(ENGINE.evalBool(when, stepScope(Map.of("existing", notFound, "ids", ids)))).isFalse();
     }
 
     @Test
-    void idsStepReusesTheStoredClientLoanIdAndBuildsAStableSeed() {
+    void oneClientLoanIdPerAttempt() {
         Step ids = step("ids");
-        CompiledExpr reuse = compile(ids.in().get("reuse"), ScopeDecl.STEP);
+        assertThat(ENGINE.eval(compile(ids.in().get("reuse"), ScopeDecl.STEP), stepScope(Map.of()))).isEqualTo("");
         CompiledExpr seed = compile(ids.in().get("seed"), ScopeDecl.STEP);
-
-        Map<String, Object> half = new HashMap<>();
-        half.put("client_loan_id", "CLID-OLD");
-        assertThat(ENGINE.eval(reuse, stepScope(Map.of("existing", existing(half))))).isEqualTo("CLID-OLD");
-
-        Map<String, Object> notFound = new HashMap<>();
-        notFound.put("found", false);
-        notFound.put("doc", null);
-        assertThat(ENGINE.eval(reuse, stepScope(Map.of("existing", notFound)))).isEqualTo("");
         assertThat(ENGINE.eval(seed, stepScope(Map.of()))).isEqualTo("LR-1:r1:axis-dedupe");
+        Map<String, Object> attempt2 = stepScope(Map.of());
+        attempt2.put("input", Map.of("loanRequestId", "LR-1", "runNo", 2, "loanProcess", "fresh"));
+        assertThat(ENGINE.eval(seed, attempt2)).isEqualTo("LR-1:r2:axis-dedupe");
     }
 
     @Test
@@ -224,7 +222,7 @@ class AxisDedupeExpressionsTest {
         assertThat(ENGINE.eval(compile(recipe.auditKeys().get("customerId"), ScopeDecl.STEP), scope)).isEqualTo("CUST-TEST-1");
         assertThat(ENGINE.eval(compile(recipe.auditKeys().get("customerId"), ScopeDecl.STEP), stepScope(Map.of()))).isNull();
         assertThat(ENGINE.eval(compile(recipe.returnSpec().out().get("applicantId"), ScopeDecl.STEP), scope)).isEqualTo("APP-9");
-        assertThat(recipe.outcomes()).containsExactly("INITIATED", "ALREADY_INITIATED", "REJECTED");
+        assertThat(recipe.outcomes()).containsExactly("INITIATED", "ALREADY_INITIATED", "IN_PROGRESS", "REJECTED");
     }
 
     // ------------------------------------------------------------------ helpers
@@ -246,7 +244,7 @@ class AxisDedupeExpressionsTest {
 
     private static Map<String, Object> stepScope(Map<String, Object> steps) {
         Map<String, Object> vars = new HashMap<>();
-        vars.put("input", Map.of("loanRequestId", "LR-1", "runNo", 1));
+        vars.put("input", Map.of("loanRequestId", "LR-1", "runNo", 1, "loanProcess", "fresh"));
         vars.put("steps", steps);
         vars.put("env", Map.of());
         vars.put("sys", Map.of());

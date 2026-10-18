@@ -1,9 +1,10 @@
 {
-  "name": "Axis 503: TECHNICAL, retried by L2",
+  "name": "dedupe: another attempt is still in progress: skipped like lendercore, skip audited",
   "recipe": "axis.precheck.dedupe",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -42,14 +43,25 @@
         }
       }
     },
-    "axis.precheck.invoke@1": {
-      "resp": {
-        "status": 503,
-        "body": null
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "clientLoanId": "legacy-random-id",
+        "responseMap": {}
       }
     }
   },
   "expect": {
-    "failure": "L1_TECHNICAL"
+    "outcome": "IN_PROGRESS",
+    "notCalled": [
+      "axis.precheck.invoke@1"
+    ],
+    "calls": {
+      "precheck.audit.insert@1": {
+        "params.status": "skip",
+        "params.loanProcess": "fresh",
+        "params.remarks": "API call skipped - Axis precheck already initiated and not yet completed"
+      }
+    }
   }
 }

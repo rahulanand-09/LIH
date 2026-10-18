@@ -62,9 +62,9 @@ class GoldenRunnerTest {
 
     @Test
     void wrongFailureType() {
-        ConfigDirs.edit(dir.resolve(DIR + "05-axis-500-unknown.golden.json"),
+        ConfigDirs.edit(dir.resolve(DIR + "06-axis-500-unknown.golden.json"),
                 o -> o.with("expect").put("failure", "L1_TECHNICAL"));
-        assertThat(problemsOf("05-axis-500-unknown.golden.json"))
+        assertThat(problemsOf("06-axis-500-unknown.golden.json"))
                 .containsExactly("expected failure L1_TECHNICAL but failed with L1_UNKNOWN");
     }
 

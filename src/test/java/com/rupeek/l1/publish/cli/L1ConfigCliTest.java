@@ -38,7 +38,7 @@ class L1ConfigCliTest {
     @Test
     void validateOfflineByDefault() {
         assertThat(run(Map.of(), "validate", "--dir", ConfigDirs.SOURCE.toString())).isZero();
-        assertThat(output()).contains("offline").contains("golden: 8/8 passed").contains("OK: nothing written");
+        assertThat(output()).contains("offline").contains("golden: 32/32 passed").contains("OK: nothing written");
     }
 
     @Test

@@ -1,9 +1,10 @@
 {
-  "name": "Axis 500 after sending: UNKNOWN, never retried",
+  "name": "dedupe: Axis times out after the request was sent: UNKNOWN",
   "recipe": "axis.precheck.dedupe",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -43,11 +44,9 @@
       }
     },
     "axis.precheck.invoke@1": {
-      "resp": {
-        "status": 500,
-        "body": {
-          "message": "boom"
-        }
+      "transport": {
+        "sent": true,
+        "timeout": true
       }
     }
   },

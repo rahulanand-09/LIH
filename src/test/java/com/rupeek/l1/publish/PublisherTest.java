@@ -47,10 +47,10 @@ class PublisherTest {
         PublishReport r = publish();
         assertThat(r.ok()).as(r.toText()).isTrue();
         assertThat(r.written()).isTrue();
-        assertThat(r.goldens()).hasSize(8);
-        assertThat(store.pointers(DocType.RECIPE)).isEqualTo(Map.of("axis.precheck.dedupe", 1));
-        assertThat(store.pointers(DocType.OPERATION)).hasSize(7);
-        assertThat(store.resources()).hasSize(3);
+        assertThat(r.goldens()).hasSize(32);
+        assertThat(store.pointers(DocType.RECIPE)).containsEntry("axis.precheck.dedupe", 1).hasSize(6);
+        assertThat(store.pointers(DocType.OPERATION)).hasSize(22);
+        assertThat(store.resources()).hasSize(4);
         assertThat(store.publishLog()).singleElement().satisfies(l -> assertThat(l.get("ok")).isEqualTo(true));
     }
 
@@ -60,7 +60,7 @@ class PublisherTest {
         PublishReport again = publish();
         assertThat(again.ok()).isTrue();
         assertThat(again.items()).allSatisfy(i -> assertThat(i.action()).isEqualTo(Action.UNCHANGED));
-        assertThat(store.all(DocType.RECIPE)).hasSize(1);
+        assertThat(store.all(DocType.RECIPE)).hasSize(6);
     }
 
     @Test
@@ -122,8 +122,8 @@ class PublisherTest {
 
         PublishReport offline = new Publisher(new InMemoryConfigStore(), true, Clock.systemUTC())
                 .validate(ConfigBundle.load(dir, new SchemaValidator()), "qa");
-        assertThat(offline.errors()).containsExactly("recipes/axis/axis.precheck.dedupe.json: "
-                + "axis.precheck.dedupe@1/steps[3:ids].op: unknown operation gen.stableId@1");
+        assertThat(offline.errors()).contains("recipes/axis/axis.precheck.dedupe.json: "
+                + "axis.precheck.dedupe@1/steps[2:ids].op: unknown operation gen.stableId@1");
     }
 
     @Test
@@ -133,7 +133,7 @@ class PublisherTest {
         PublishReport r = publish();
         assertThat(r.ok()).isFalse();
         assertThat(r.written()).isFalse();
-        assertThat(r.toText()).contains("FAIL fresh customer, dedupe accepted")
+        assertThat(r.toText()).contains("FAIL dedupe: fresh customer, dedupe accepted")
                 .contains("expected outcome REJECTED but got INITIATED");
         assertThat(store.all(DocType.RECIPE)).isEmpty();
     }

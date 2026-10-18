@@ -1,0 +1,13 @@
+{
+  "name": "status: no precheck stored",
+  "recipe": "axis.precheck.status",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1"
+  },
+  "expect": {
+    "outcome": "NO_PRECHECK",
+    "notCalled": [
+      "axis.precheck.status@1"
+    ]
+  }
+}

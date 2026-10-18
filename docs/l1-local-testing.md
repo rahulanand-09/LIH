@@ -36,7 +36,12 @@ Publishing a new version while the app is running takes effect without a restart
 
 ```bash
 dev/l1-local/l1-local.sh probe LR-OK-1        # optional: runNo (default 1), recipeVersion (default 1)
+dev/l1-local/l1-local.sh run-recipe axis.precheck.status '{"loanRequestId":"LR-OK-1"}'   # any recipe
 ```
+
+The stubs also answer Timble (`reference_id` `TIMBLE-LOCAL-1`), status (all `Y`) and both rupeekweb
+notifications, so the whole Axis precheck can be run one recipe after another (see
+[`l1-axis-precheck.md`](l1-axis-precheck.md)).
 
 The stubs choose the scenario from the `loanRequestId` prefix:
 

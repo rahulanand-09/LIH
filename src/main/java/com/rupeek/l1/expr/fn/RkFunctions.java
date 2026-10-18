@@ -43,8 +43,8 @@ import java.util.UUID;
  *   <tr><td>{@code rk.mask(v, keepLast)}</td><td>{@code XXXXXX1234}; null stays null</td></tr>
  *   <tr><td>{@code rk.nameSplit(customer, 'first'|'middle'|'last')}</td><td>legacy name rule (see method)</td></tr>
  *   <tr><td>{@code rk.uuidFrom(seed)}</td><td>name-based UUID v5; same seed, same id</td></tr>
- *   <tr><td>{@code rk.str(v)}</td><td>scalar as a string, null stays null; mirrors a Java {@code String} DTO field
- *       (a number from upstream is sent as {@code "560001"})</td></tr>
+ *   <tr><td>{@code rk.str(v)}, {@code rk.str(v, default)}</td><td>scalar as a string, null stays null (or
+ *       {@code default}); mirrors a Java {@code String} DTO field and {@code Objects.toString(v, default)}</td></tr>
  * </table>
  */
 public final class RkFunctions implements FunctionLibrary {
@@ -95,6 +95,8 @@ public final class RkFunctions implements FunctionLibrary {
                 a -> nameSplit(map(a[0], "rk.nameSplit"), (String) a[1]));
         add("rk.uuidFrom", "rk_uuidFrom", str, List.of(str), List.of(String.class), a -> uuidFrom((String) a[0]));
         add("rk.str", "rk_str", dyn, List.of(dyn), List.of(Object.class), a -> str(a[0]));
+        add("rk.str", "rk_str_default", dyn, List.of(dyn, str), List.of(Object.class, String.class),
+                a -> { Object v = str(a[0]); return v == null ? a[1] : v; });
     }
 
     @Override

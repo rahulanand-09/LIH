@@ -42,9 +42,9 @@ class StoreRecipeSourceTest {
 
     @Test
     void compilesPublishedVersionsAtStartUp() {
-        assertThat(source.warmUp()).isEqualTo(1);
+        assertThat(source.warmUp()).isEqualTo(6);
         assertThat(source.latestVersion("axis.precheck.dedupe")).isEqualTo(1);
-        assertThat(source.recipe("axis.precheck.dedupe", 1).steps()).hasSize(8);
+        assertThat(source.recipe("axis.precheck.dedupe", 1).steps()).hasSize(10);
         assertThat(new RegistryService(source).resolve(java.util.List.of("axis.precheck.dedupe")))
                 .isEqualTo(Map.of("axis.precheck.dedupe", 1));
     }

@@ -82,6 +82,7 @@ class AxisDedupeRunTaskTest {
         prechecks = db.getCollection("LenderCustomerPrecheck");
         prechecks.drop();
         db.getCollection(MongoAuditWriter.COLLECTION).drop();
+        db.getCollection("LenderCustomerPrecheckAudit").drop();
         auditWriter = new MongoAuditWriter(db, 100);
 
         Map<String, String> env = Map.of(
@@ -113,7 +114,7 @@ class AxisDedupeRunTaskTest {
 
     private static TaskRequest dedupe(String loanRequestId) {
         return new TaskRequest("axis.precheck.dedupe", 1, "axis-precheck-CUST-TEST-1-" + loanRequestId, 1,
-                Map.of("loanRequestId", loanRequestId, "runNo", 1));
+                Map.of("loanRequestId", loanRequestId, "runNo", 1, "loanProcess", "fresh"));
     }
 
     private void axisReplies(MappingBuilder request) {
@@ -145,7 +146,9 @@ class AxisDedupeRunTaskTest {
         assertThat(doc.getString("lenderSlug")).isEqualTo("axis");
         assertThat(doc.getString("precheckStatus")).isEqualTo("processed");
         assertThat(doc.getString("applicantId")).isEqualTo("APP-TEST-9");
-        assertThat(doc.getString("client_loan_id")).isEqualTo(expectedClientLoanId);
+        assertThat(doc.getString("clientLoanId")).isEqualTo(expectedClientLoanId);   // Spring Data field name
+        assertThat(doc.getBoolean("approved")).isFalse();
+        assertThat(doc.getString("_class")).isEqualTo("com.rupeek.lender.entity.PrecheckEntity");
         assertThat(doc.getString("customerId")).isEqualTo("CUST-TEST-1");
 
         auditWriter.close();
@@ -169,18 +172,42 @@ class AxisDedupeRunTaskTest {
     }
 
     @Test
-    void rerunAfterACrashReusesTheStoredClientLoanId() {
-        // State left by a run that died after saving intent but before recording Axis's answer
+    void aNewAttemptAfterACompletedPrecheckSendsANewClientLoanId() {
+        // A finished earlier attempt (e.g. lendercore or L1 run 1 ended in FAILURE); L2 starts attempt 2
         prechecks.insertOne(new Document("loanRequestId", "LR-1").append("lenderSlug", "axis")
-                .append("client_loan_id", "CL-FROM-FIRST-ATTEMPT").append("precheckStatus", "initiated"));
+                .append("clientLoanId", "CL-FROM-ATTEMPT-1").append("applicantId", "APP-OLD").append("reference_id", "T-OLD")
+                .append("rejectionReason", "old").append("responseMap", new Document("axisPreCheckStatus",
+                        new Document("status", "FAILURE").append("statusMessage", "old")).append("pan", new Document("status", "FAILURE"))));
         axisReplies(post(urlPathEqualTo(AXIS_PATH)).willReturn(json(200, fixture("axis-dedupe-success.json"))));
+
+        TaskResult result = activity.runTask(new TaskRequest("axis.precheck.dedupe", 1, "c", 2,
+                Map.of("loanRequestId", "LR-1", "runNo", 2, "loanProcess", "fresh")));
+
+        String attempt2 = RkFunctions.uuidFrom("LR-1:r2:axis-dedupe");
+        assertThat(result.outputs().get("clientLoanId")).isEqualTo(attempt2);
+        server.verify(postRequestedFor(urlPathEqualTo(AXIS_PATH))
+                .withRequestBody(matchingJsonPath("$.client_loan_id", equalTo(attempt2))));
+        Document doc = prechecks.find().first();
+        assertThat(prechecks.countDocuments()).isEqualTo(1);
+        assertThat(doc.getString("clientLoanId")).isEqualTo(attempt2);
+        assertThat(doc.get("responseMap", Document.class).toJson())
+                .isEqualTo("{\"axisPreCheckStatus\": {\"status\": \"PENDING\", \"statusMessage\": \"Precheck re-initiated for the loanRequest\"}}");
+        assertThat(doc.get("rejectionReason")).isNull();
+        assertThat(doc.get("reference_id")).isNull();
+    }
+
+    @Test
+    void anotherAttemptStillInProgressIsSkippedLikeLendercore() {
+        prechecks.insertOne(new Document("loanRequestId", "LR-1").append("lenderSlug", "axis")
+                .append("clientLoanId", "legacy-random").append("responseMap", new Document()));
 
         TaskResult result = activity.runTask(dedupe("LR-1"));
 
-        assertThat(result.outputs().get("clientLoanId")).isEqualTo("CL-FROM-FIRST-ATTEMPT");
-        server.verify(postRequestedFor(urlPathEqualTo(AXIS_PATH))
-                .withRequestBody(matchingJsonPath("$.client_loan_id", equalTo("CL-FROM-FIRST-ATTEMPT"))));
-        assertThat(prechecks.countDocuments()).isEqualTo(1);
+        assertThat(result.outcome()).isEqualTo("IN_PROGRESS");
+        server.verify(0, postRequestedFor(urlPathEqualTo(AXIS_PATH)));
+        Document skip = db.getCollection("LenderCustomerPrecheckAudit").find().first();
+        assertThat(skip.getString("precheckStatus")).isEqualTo("skip");
+        assertThat(skip.getString("loanProcess")).isEqualTo("fresh");
     }
 
     // ------------------------------------------------------------------ failures, as L2 will see them
@@ -192,7 +219,7 @@ class AxisDedupeRunTaskTest {
         TaskResult result = activity.runTask(dedupe("LR-1"));
 
         assertThat(result.outcome()).isEqualTo("REJECTED");
-        assertThat(prechecks.find().first().getString("precheckStatus")).isEqualTo("initiated");
+        assertThat(prechecks.countDocuments()).isZero();   // a failed dedupe saves nothing; the Timble step creates the record, as lendercore's single save does
     }
 
     @Test
@@ -237,7 +264,7 @@ class AxisDedupeRunTaskTest {
 
     @Test
     void missingInputIsPermanent() {
-        ApplicationFailure f = failureOf(new TaskRequest("axis.precheck.dedupe", 1, "c", 1, Map.of("runNo", 1)));
+        ApplicationFailure f = failureOf(new TaskRequest("axis.precheck.dedupe", 1, "c", 1, Map.of("runNo", 1, "loanProcess", "fresh")));
         assertThat(f.getType()).isEqualTo(L1FailureType.L1_PERMANENT.name());
         assertThat(f.getMessage()).contains("loanRequestId");
     }

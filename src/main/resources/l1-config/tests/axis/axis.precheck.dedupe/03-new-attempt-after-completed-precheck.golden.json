@@ -1,9 +1,10 @@
 {
-  "name": "Axis returns errors inside a 200: REJECTED, nothing marked done",
+  "name": "dedupe: a completed earlier attempt is re-run with a NEW client_loan_id",
   "recipe": "axis.precheck.dedupe",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 2,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -46,20 +47,45 @@
       "resp": {
         "status": 200,
         "body": {
-          "errors": [
-            {
-              "errorCode": "DEDUPE_FAILED",
-              "message": "Customer already exists"
-            }
-          ]
+          "data": {
+            "applicantId": "APP-TEST-9",
+            "consumerLoanApplicationRefId": "REF-TEST-9",
+            "onBoardingInProgress": "N"
+          },
+          "code": "200",
+          "message": "ok"
+        }
+      }
+    },
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "applicantId": "APP-OLD",
+        "responseMap": {
+          "axisPreCheckStatus": {
+            "status": "FAILURE",
+            "statusMessage": "x"
+          }
         }
       }
     }
   },
   "expect": {
-    "outcome": "REJECTED",
+    "outcome": "INITIATED",
+    "out": {
+      "clientLoanId": "e385eadf-1d4f-5c69-8bcf-0992d33d30b9"
+    },
+    "calls": {
+      "axis.precheck.invoke@1": {
+        "params.body.client_loan_id": "e385eadf-1d4f-5c69-8bcf-0992d33d30b9"
+      },
+      "axis.precheck.saveDedupeRerun@1": {
+        "params.clientLoanId": "e385eadf-1d4f-5c69-8bcf-0992d33d30b9"
+      }
+    },
     "notCalled": [
-      "precheck.markDedupeDone@1"
+      "axis.precheck.saveDedupe@1"
     ]
   }
 }

@@ -1,0 +1,21 @@
+{
+  "name": "rupeekweb-failure",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/lender/updateprecheckfailure",
+    "headers": {
+      "Authorization": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true
+    }
+  }
+}

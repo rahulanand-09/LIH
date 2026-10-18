@@ -8,6 +8,8 @@
 #   dev/l1-local/l1-local.sh publish        # validate + publish src/main/resources/l1-config to local lih_config
 #   dev/l1-local/l1-local.sh config ARGS    # any config CLI command, e.g. config status
 #   dev/l1-local/l1-local.sh probe LR-OK-1 [runNo] [recipeVersion]  # RunTask(axis.precheck.dedupe)
+#   dev/l1-local/l1-local.sh run-recipe axis.precheck.timble '{"loanRequestId":"LR-OK-1","runNo":1,"loanProcess":"fresh"}'
+
 #
 # Scenarios are picked by the loanRequestId prefix: LR-OK, LR-REJECT, LR-503, LR-500, LR-NOCORE
 # (see docs/l1-local-testing.md). Point CORE_BASEURL / AXIS_PRECHECK_BASEURL and the two secrets at real
@@ -24,6 +26,8 @@ export CORE_BASEURL="${CORE_BASEURL:-http://localhost:$STUB_PORT}"
 export CORE_TOKEN="${CORE_TOKEN:-stub-core-token}"
 export AXIS_PRECHECK_BASEURL="${AXIS_PRECHECK_BASEURL:-http://localhost:$STUB_PORT}"
 export AXIS_PRECHECK_API_KEY="${AXIS_PRECHECK_API_KEY:-stub-axis-key}"
+export RUPEEKWEB_BASEURL="${RUPEEKWEB_BASEURL:-http://localhost:$STUB_PORT}"
+export RUPEEKWEB_ADMIN_TOKEN="${RUPEEKWEB_ADMIN_TOKEN:-stub-rupeekweb-token}"
 
 infra() {
   if ! docker ps --format '{{.Names}}' | grep -qx l1-mongo; then
@@ -70,7 +74,15 @@ probe() {
   local lr="${1:?usage: probe <loanRequestId> [runNo] [recipeVersion]}" run="${2:-1}" ver="${3:-1}"
   temporal workflow execute --type L1Probe --task-queue lih-l1 \
     --workflow-id "l1-probe-$lr-r$run-$(date +%s)" \
-    --input "{\"recipeRef\":\"axis.precheck.dedupe\",\"recipeVersion\":$ver,\"caseId\":\"l1-probe-$lr\",\"runNo\":$run,\"inputs\":{\"loanRequestId\":\"$lr\",\"runNo\":$run}}"
+    --input "{\"recipeRef\":\"axis.precheck.dedupe\",\"recipeVersion\":$ver,\"caseId\":\"l1-probe-$lr\",\"runNo\":$run,\"inputs\":{\"loanRequestId\":\"$lr\",\"runNo\":$run,\"loanProcess\":\"fresh\"}}"
+}
+
+# Any recipe: run-recipe axis.precheck.status '{"loanRequestId":"LR-OK-1"}' [recipeVersion]
+run_recipe() {
+  local recipe="${1:?usage: run-recipe <recipe> '<inputs json>' [recipeVersion]}" inputs="${2:?inputs json}" ver="${3:-1}"
+  temporal workflow execute --type L1Probe --task-queue lih-l1 \
+    --workflow-id "l1-probe-$recipe-$(date +%s)" \
+    --input "{\"recipeRef\":\"$recipe\",\"recipeVersion\":$ver,\"caseId\":\"l1-probe-$recipe\",\"runNo\":1,\"inputs\":$inputs}"
 }
 
 cmd="${1:-}"; shift || true
@@ -81,5 +93,6 @@ case "$cmd" in
   publish) config publish --env local --reason "${REASON:-local publish}" ;;
   config) config "$@" ;;
   probe) probe "$@" ;;
-  *) sed -n '2,14p' "$0"; exit 1 ;;
+  run-recipe) run_recipe "$@" ;;
+  *) sed -n '2,16p' "$0"; exit 1 ;;
 esac

@@ -1,9 +1,10 @@
 {
-  "name": "applicantId already stored: no lender call",
-  "recipe": "axis.precheck.dedupe",
+  "name": "timble: Timble errors inside a 200: REJECTED, nothing saved",
+  "recipe": "axis.precheck.timble",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -42,22 +43,24 @@
         }
       }
     },
-    "precheck.findByLoanRequest@1": {
-      "result": {
-        "applicantId": "APP-OLD",
-        "client_loan_id": "CL-OLD"
+    "axis.precheck.timble@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "errors": [
+            {
+              "message": "bad"
+            }
+          ]
+        }
       }
     }
   },
   "expect": {
-    "outcome": "ALREADY_INITIATED",
-    "out": {
-      "applicantId": "APP-OLD",
-      "clientLoanId": "CL-OLD"
-    },
+    "outcome": "REJECTED",
     "notCalled": [
-      "axis.precheck.invoke@1",
-      "precheck.upsertInitiated@1"
+      "axis.precheck.saveTimbleRef@1",
+      "precheck.audit.insert@1"
     ]
   }
 }

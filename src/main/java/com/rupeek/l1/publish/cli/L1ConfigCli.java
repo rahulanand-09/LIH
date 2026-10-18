@@ -51,7 +51,8 @@ import java.util.function.Function;
  * status   [--mongo-uri URI]                                   pointers and resources in the registry
  * redirect --ref REF --from N --to M --reason TEXT [--by NAME] [--mongo-uri URI]
  * parity   --audit-uri URI --env ENV --recipe REF --capture OP --request-type TYPE --lender SLUG
- *          [--live OP,OP] [--body-param body] [--ignore PATH,PATH] [--limit 20] [--since ISO] [--loan-request-id ID]
+ *          [--live OP,OP] [--body-param body] [--ignore PATH,PATH] [--input KEY=VALUE,..] [--limit 20] [--since ISO]
+ *          [--loan-request-id ID]
  *          [--audit-db lendercore] [--show-values] [--dir DIR]
  * </pre>
  * {@code parity} compares the request a recipe would send with what lendercore logged in {@code LenderApiAuditLog}.
@@ -199,6 +200,14 @@ public final class L1ConfigCli {
         String auditUri = required(o, "audit-uri");
         Set<String> live = list(o.get("live"));
         Set<String> ignore = list(o.get("ignore"));
+        Map<String, Object> extraInput = new java.util.LinkedHashMap<>();
+        for (String kv : list(o.get("input"))) {
+            int eq = kv.indexOf('=');
+            if (eq < 1) {
+                throw new UsageException("--input takes KEY=VALUE pairs, e.g. loanProcess=fresh");
+            }
+            extraInput.put(kv.substring(0, eq), kv.substring(eq + 1));
+        }
         int limit = o.containsKey("limit") ? number(o, "limit") : 20;
         Instant since;
         try {
@@ -241,8 +250,10 @@ public final class L1ConfigCli {
                         "logged payload is not JSON (truncated at 10,000 chars?)"));
                 continue;
             }
-            results.add(runner.check(s.loanRequestId(), Map.of("loanRequestId", s.loanRequestId(), "runNo", 1),
-                    Map.of(), legacy));
+            Map<String, Object> input = new java.util.LinkedHashMap<>(extraInput);
+            input.put("loanRequestId", s.loanRequestId());
+            input.putIfAbsent("runNo", 1);
+            results.add(runner.check(s.loanRequestId(), input, Map.of(), legacy));
         }
         out.print(ParityReport.text(results, o.containsKey("show-values")));
         out.println("note: customer data is read from Core today; a field changed since the logged call shows as a diff");
@@ -335,7 +346,8 @@ public final class L1ConfigCli {
                   status   [--mongo-uri URI]
                   redirect --ref REF --from N --to M --reason TEXT [--by NAME] [--mongo-uri URI]
                   parity   --audit-uri URI --env ENV --recipe REF --capture OP --request-type TYPE --lender SLUG
-                           [--live OP,OP] [--ignore PATH,PATH] [--limit N] [--since ISO] [--loan-request-id ID]
+                           [--live OP,OP] [--ignore PATH,PATH] [--input KEY=VALUE,..] [--limit N] [--since ISO]
+                           [--loan-request-id ID]
                            [--body-param body] [--audit-db lendercore] [--show-values] [--dir DIR]
                 registry: --mongo-uri or L1_CONFIG_MONGO_URI; --database (default lih_config)""");
         return 2;

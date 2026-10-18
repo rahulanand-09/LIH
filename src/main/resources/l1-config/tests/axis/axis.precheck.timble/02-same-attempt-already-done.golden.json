@@ -1,9 +1,10 @@
 {
-  "name": "earlier run stored an id but no applicantId: the same client_loan_id is sent again",
-  "recipe": "axis.precheck.dedupe",
+  "name": "timble: same attempt already has a reference (Temporal retry): no lender call",
+  "recipe": "axis.precheck.timble",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -44,36 +45,21 @@
     },
     "precheck.findByLoanRequest@1": {
       "result": {
-        "client_loan_id": "CL-KEEP"
-      }
-    },
-    "axis.precheck.invoke@1": {
-      "resp": {
-        "status": 200,
-        "body": {
-          "data": {
-            "applicantId": "APP-TEST-9",
-            "consumerLoanApplicationRefId": "REF-TEST-9",
-            "onBoardingInProgress": "N"
-          },
-          "code": "200",
-          "message": "ok"
-        }
+        "loanRequestId": "LR-GOLDEN-1",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "applicantId": "A",
+        "reference_id": "TIMBLE-OLD"
       }
     }
   },
   "expect": {
-    "outcome": "INITIATED",
+    "outcome": "ALREADY_INITIATED",
     "out": {
-      "clientLoanId": "CL-KEEP"
+      "timbleReferenceId": "TIMBLE-OLD"
     },
-    "calls": {
-      "axis.precheck.invoke@1": {
-        "params.body.client_loan_id": "CL-KEEP"
-      },
-      "precheck.upsertInitiated@1": {
-        "params.clientLoanId": "CL-KEEP"
-      }
-    }
+    "notCalled": [
+      "axis.precheck.timble@1",
+      "precheck.audit.insert@1"
+    ]
   }
 }

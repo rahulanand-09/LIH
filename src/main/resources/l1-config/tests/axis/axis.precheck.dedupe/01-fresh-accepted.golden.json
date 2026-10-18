@@ -1,9 +1,10 @@
 {
-  "name": "fresh customer, dedupe accepted",
+  "name": "dedupe: fresh customer, dedupe accepted",
   "recipe": "axis.precheck.dedupe",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -60,24 +61,30 @@
   "expect": {
     "outcome": "INITIATED",
     "out": {
-      "applicantId": "APP-TEST-9"
+      "applicantId": "APP-TEST-9",
+      "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4"
     },
     "calls": {
       "axis.precheck.invoke@1": {
         "params.type": "dedupe",
+        "params.body.client_loan_id": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
         "params.body.customer_id": "CUST-TEST-1",
+        "params.body.application_id": null,
         "params.body.first_name": "RAVI",
         "params.body.middle_name": "KUMAR",
         "params.body.last_name": "SHARMA",
-        "params.body.mobile_number": "9000000001",
-        "params.body.dedupe_ids[0].id_value": "ABCDE1234F",
         "params.body.address[0].address_value": "12, MG Road Bengaluru",
         "params.body.address[1].address_city": "Mysuru"
       },
-      "precheck.markDedupeDone@1": {
+      "axis.precheck.saveDedupe@1": {
         "params.applicantId": "APP-TEST-9",
-        "params.lender": "axis"
+        "params.clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "params.customerId": "CUST-TEST-1"
       }
-    }
+    },
+    "notCalled": [
+      "axis.precheck.saveDedupeRerun@1",
+      "precheck.audit.insert@1"
+    ]
   }
 }

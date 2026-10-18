@@ -172,7 +172,7 @@ class AxisDedupeParityTest {
     }
 
     private static Map<String, Object> input() {
-        return Map.of("loanRequestId", "LR-PARITY-1", "runNo", 1);
+        return Map.of("loanRequestId", "LR-PARITY-1", "runNo", 1, "loanProcess", "fresh");
     }
 
     private static Map<String, Map<String, Object>> coreMock(Map<String, Object> customer) {

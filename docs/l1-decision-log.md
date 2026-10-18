@@ -43,6 +43,10 @@ review. **Open** = needs an answer; the default used until then is noted.
 | P21 | Redirects apply to recipes only; newest wins; a redirect to the same version undoes | Operations are pinned inside immutable recipes |
 | P23 | Parity oracle = a test-only, verbatim copy of the legacy mapping (`LegacyAxisPrecheckMapping`), plus a live `parity` command against `LenderApiAuditLog` | Parity can be proven before QA access; the live run then confirms on real data |
 | P24 | `client_loan_id` differs from legacy by design: legacy sends a new random UUID on every call; L1 sends a stable id (UUIDv5 of loanRequestId + runNo) and reuses the stored one on reruns | Rerun safety; ignored by parity |
+| P25 | A new `client_loan_id` per attempt (`runNo`), the same id within an attempt (answers Q16; decided 2026-10-18) | Matches lendercore (new id per precheck call) while keeping Temporal retries safe |
+| P26 | Axis precheck = six recipes: dedupe, timble, timbleCallback, status, notify.verified, notify.failed; persist and notify live in L1, not in L2 sinks | L2 routes on outcomes only (closes L2 gap 2); notify recipes are lender-agnostic |
+| P27 | Precheck documents use Spring Data field names (`clientLoanId`, `reference_id`, `last_updated`, `_class` …) | lendercore reads the same documents; `@JsonProperty` does not change Mongo names |
+| P28 | `ResolveRecipes` activity (on `lih-l1`) for version pinning at case start | Workflow code cannot read the registry directly (not deterministic) |
 | P22 | CI: PR → `mvn test` + `validate --env qa`; merge → publish QA; manual → publish prod (GitHub environment `l1-prod` with reviewers) | Answers the "how" of Q8 for the POC; who approves prod is still open |
 
 ## Open
@@ -63,7 +67,8 @@ review. **Open** = needs an answer; the default used until then is noted.
 | Q12 | `$each`/`$let` in templates, or nested CEL `map()` only? | Support `$each`/`$let` |
 | Q13 | Use Java 21 virtual threads for activity execution? | Platform threads until evaluated in M3 |
 | Q14 | Where do the QA and prod `lih_config` registries live, and who holds `L1_CONFIG_MONGO_URI_QA/PROD`? | Local Mongo (`dev/l1-local`) |
-| Q16 | On a revert (`runNo` + 1) after a REJECTED dedupe, should Axis get a new `client_loan_id`? Today the recipe reuses the stored id whatever the `runNo` (legacy: always a new random id) | Reuse stored id; one-line change to derive it from `runNo` only (see M5 notes) |
+| Q17 | Timble `REJECTED` (error from Axis): what should L2 do? lendercore saves a null reference and polls forever | L2 decision; reference workflow continues to wait for the callback |
+| Q18 | Status polling: on a timer, on rupeekweb's GET, or both; and the deadline | Reference: every 5 min, 50 polls |
 | Q15 | Retiring old versions: when and how (needs "no open case pins it" from Temporal visibility)? | Never retired; all stored versions compiled at start-up |
 
 ## Rejected alternatives

@@ -86,7 +86,7 @@ class ParityCommandTest {
         List<String> args = new java.util.ArrayList<>(List.of("parity", "--dir", ConfigDirs.SOURCE.toString(),
                 "--env", "local", "--recipe", "axis.precheck.dedupe", "--capture", "axis.precheck.invoke",
                 "--live", "core.fetchCustomerByLoanRequest", "--request-type", "PRECHECK_DEDUPE", "--lender", "axis",
-                "--ignore", "client_loan_id", "--audit-uri", "mongodb://audit", "--audit-db", lendercore.getName()));
+                "--ignore", "client_loan_id", "--input", "loanProcess=fresh", "--audit-uri", "mongodb://audit", "--audit-db", lendercore.getName()));
         args.addAll(List.of(extra));
         return cli.run(args.toArray(String[]::new));
     }

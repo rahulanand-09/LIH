@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -68,6 +69,7 @@ class AxisDedupeRerunTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static WireMockServer server;
 
+    private com.mongodb.client.MongoDatabase db;
     private MongoCollection<Document> prechecks;
     private RecipeRunner runner;
     private final CrashSwitch crash = new CrashSwitch();
@@ -125,10 +127,13 @@ class AxisDedupeRerunTest {
         server.stubFor(get(urlPathEqualTo("/api/support/fetchloandetailsv2"))
                 .willReturn(json(fixture("core-customer-response.json"))));
         server.stubFor(post(urlPathEqualTo(AXIS_PATH)).willReturn(json(fixture("axis-dedupe-success.json"))));
+        server.stubFor(post(urlPathEqualTo(AXIS_PATH)).withQueryParam("type", equalTo("dedupe_timble"))
+                .willReturn(json("{\"status\": \"SUCCESS\", \"reference_id\": \"TIMBLE-REF-1\"}")));
 
-        var db = MongoTestSupport.client().getDatabase("lendercore");
+        db = MongoTestSupport.client().getDatabase("lendercore");
         prechecks = db.getCollection("LenderCustomerPrecheck");
         prechecks.drop();
+        db.getCollection("LenderCustomerPrecheckAudit").drop();
 
         Map<String, String> env = Map.of("AXIS_PRECHECK_BASEURL", server.baseUrl(), "CORE_BASEURL", server.baseUrl(),
                 "AXIS_PRECHECK_API_KEY", "k", "CORE_TOKEN", "t");
@@ -151,38 +156,69 @@ class AxisDedupeRerunTest {
                 new SimpleMeterRegistry(), Clock.systemUTC());
     }
 
-    @ParameterizedTest(name = "crash after {0}: rerun gives {1}, Axis called {2}x")
+    private static TaskRequest request(String recipe, String lr) {
+        return new TaskRequest(recipe, 1, "case-" + lr, 1, Map.of("loanRequestId", lr, "runNo", 1, "loanProcess", "fresh"));
+    }
+
+    private List<String> sentClientLoanIds(String type) throws IOException {
+        List<String> ids = new ArrayList<>();
+        for (LoggedRequest r : server.findAll(postRequestedFor(urlPathEqualTo(AXIS_PATH)).withQueryParam("type", equalTo(type)))) {
+            ids.add(JSON.readTree(r.getBodyAsString()).get("client_loan_id").asText());
+        }
+        return ids;
+    }
+
+    @ParameterizedTest(name = "dedupe, crash after {0}: rerun gives {1}, Axis called {2}x")
     @CsvSource({
             "core.fetchCustomerByLoanRequest, INITIATED,         1",
             "precheck.findByLoanRequest,      INITIATED,         1",
             "gen.stableId,                    INITIATED,         1",
-            "precheck.upsertInitiated,        INITIATED,         1",
             "map.axis.precheckRequest,        INITIATED,         1",
             "axis.precheck.invoke,            INITIATED,         2",
-            "precheck.markDedupeDone,         ALREADY_INITIATED, 1",
+            "axis.precheck.saveDedupe,        ALREADY_INITIATED, 1",
     })
-    void aRerunAfterACrashHasNoDuplicateSideEffects(String afterOp, String outcome, int axisCalls) throws Exception {
+    void dedupeRerunAfterACrashHasNoDuplicateSideEffects(String afterOp, String outcome, int axisCalls) throws Exception {
         String lr = "LR-RERUN-" + afterOp;
-        TaskRequest request = new TaskRequest("axis.precheck.dedupe", 1, "case-" + lr, 1,
-                Map.of("loanRequestId", lr, "runNo", 1));
         crash.afterOp = afterOp;
 
-        assertThatThrownBy(() -> runner.run(request, RecipeRunner.Heartbeat.NONE)).isInstanceOf(SimulatedCrash.class);
-        TaskResult rerun = runner.run(request, RecipeRunner.Heartbeat.NONE);
+        assertThatThrownBy(() -> runner.run(request("axis.precheck.dedupe", lr), RecipeRunner.Heartbeat.NONE))
+                .isInstanceOf(SimulatedCrash.class);
+        TaskResult rerun = runner.run(request("axis.precheck.dedupe", lr), RecipeRunner.Heartbeat.NONE);
 
         assertThat(rerun.outcome()).isEqualTo(outcome);
         List<Document> docs = prechecks.find(Filters.eq("loanRequestId", lr)).into(new ArrayList<>());
         assertThat(docs).as("one precheck document").hasSize(1);
         Document doc = docs.get(0);
         assertThat(doc.getString("applicantId")).isEqualTo("APP-TEST-9");
+        List<String> sent = sentClientLoanIds("dedupe");
+        assertThat(sent).as("Axis calls").hasSize(axisCalls);
+        assertThat(sent).as("one client_loan_id per attempt").containsOnly(doc.getString("clientLoanId"));
+        assertThat(rerun.outputs().get("clientLoanId")).isEqualTo(doc.getString("clientLoanId"));
+    }
 
-        List<String> sentIds = new ArrayList<>();
-        for (LoggedRequest r : server.findAll(postRequestedFor(urlPathEqualTo(AXIS_PATH)))) {
-            sentIds.add(JSON.readTree(r.getBodyAsString()).get("client_loan_id").asText());
-        }
-        assertThat(sentIds).as("Axis calls").hasSize(axisCalls);
-        assertThat(sentIds).as("one client_loan_id everywhere").containsOnly(doc.getString("client_loan_id"));
-        assertThat(rerun.outputs().get("clientLoanId")).isEqualTo(doc.getString("client_loan_id"));
+    @ParameterizedTest(name = "timble, crash after {0}: rerun gives {1}, Timble called {2}x")
+    @CsvSource({
+            "core.fetchCustomerByLoanRequest, INITIATED,         1",
+            "map.axis.precheckRequest,        INITIATED,         1",
+            "axis.precheck.timble,            INITIATED,         2",
+            "axis.precheck.saveTimbleRef,     ALREADY_INITIATED, 1",
+            "precheck.audit.insert,           ALREADY_INITIATED, 1",
+    })
+    void timbleRerunAfterACrashHasNoDuplicateSideEffects(String afterOp, String outcome, int timbleCalls) throws Exception {
+        String lr = "LR-TIMBLE-" + afterOp;
+        TaskResult dedupe = runner.run(request("axis.precheck.dedupe", lr), RecipeRunner.Heartbeat.NONE);
+        crash.afterOp = afterOp;
+
+        assertThatThrownBy(() -> runner.run(request("axis.precheck.timble", lr), RecipeRunner.Heartbeat.NONE))
+                .isInstanceOf(SimulatedCrash.class);
+        TaskResult rerun = runner.run(request("axis.precheck.timble", lr), RecipeRunner.Heartbeat.NONE);
+
+        assertThat(rerun.outcome()).isEqualTo(outcome);
+        assertThat(rerun.outputs().get("timbleReferenceId")).isEqualTo("TIMBLE-REF-1");
+        assertThat(prechecks.countDocuments(Filters.eq("loanRequestId", lr))).isEqualTo(1);
+        assertThat(prechecks.find(Filters.eq("loanRequestId", lr)).first().getString("reference_id")).isEqualTo("TIMBLE-REF-1");
+        assertThat(sentClientLoanIds("dedupe_timble")).as("Timble calls, all with the dedupe's id")
+                .hasSize(timbleCalls).containsOnly((String) dedupe.outputs().get("clientLoanId"));
     }
 
     private static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder json(String body) {

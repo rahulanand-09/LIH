@@ -1,0 +1,40 @@
+{
+  "name": "timble callback: name and Aadhaar match: SUCCESS stored on the latest precheck",
+  "recipe": "axis.precheck.timbleCallback",
+  "input": {
+    "event": {
+      "product_id": "P1",
+      "customer_id": "CUST-TEST-1",
+      "timble_status": "COMPLETED",
+      "name_match": "Y",
+      "aadhar_match": "Y"
+    }
+  },
+  "mocks": {
+    "precheck.findLatestByCustomer@1": {
+      "result": {
+        "loanRequestId": "LR-9",
+        "customerId": "CUST-TEST-1"
+      }
+    }
+  },
+  "expect": {
+    "outcome": "TIMBLE_OK",
+    "out": {
+      "customerId": "CUST-TEST-1",
+      "loanRequestId": "LR-9",
+      "timbleOk": true
+    },
+    "calls": {
+      "precheck.findLatestByCustomer@1": {
+        "params.customerId": "CUST-TEST-1",
+        "params.lender": "axis"
+      },
+      "axis.precheck.saveTimbleStatus@1": {
+        "params.loanRequestId": "LR-9",
+        "params.status": "SUCCESS",
+        "params.message": "Timble Precheck Successful"
+      }
+    }
+  }
+}

@@ -24,14 +24,17 @@ public final class L1TemporalWorker implements SmartLifecycle {
 
     private final L1Properties.Temporal settings;
     private final TaskActivityImpl activity;
+    private final RegistryActivityImpl registry;
     private final boolean probeWorkflow;
     private WorkflowServiceStubs stubs;
     private WorkerFactory factory;
     private volatile boolean running;
 
-    public L1TemporalWorker(L1Properties.Temporal settings, TaskActivityImpl activity, boolean probeWorkflow) {
+    public L1TemporalWorker(L1Properties.Temporal settings, TaskActivityImpl activity, RegistryActivityImpl registry,
+                            boolean probeWorkflow) {
         this.settings = settings;
         this.activity = activity;
+        this.registry = registry;
         this.probeWorkflow = probeWorkflow;
     }
 
@@ -45,7 +48,7 @@ public final class L1TemporalWorker implements SmartLifecycle {
         Worker worker = factory.newWorker(settings.getTaskQueue(), WorkerOptions.newBuilder()
                 .setMaxConcurrentActivityExecutionSize(settings.getMaxConcurrentActivities())
                 .build());
-        worker.registerActivitiesImplementations(activity);
+        worker.registerActivitiesImplementations(activity, registry);
         if (probeWorkflow) {
             worker.registerWorkflowImplementationTypes(L1ProbeWorkflowImpl.class);
             LOG.warn("L1 dev probe workflow is registered; do not enable l1.dev.probe-workflow outside local/qa");

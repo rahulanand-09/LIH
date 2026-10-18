@@ -1,9 +1,10 @@
 {
-  "name": "Axis times out after the request was sent: UNKNOWN",
-  "recipe": "axis.precheck.dedupe",
+  "name": "timble: dedupe was rejected (no precheck saved): Timble still runs, like lendercore",
+  "recipe": "axis.precheck.timble",
   "input": {
     "loanRequestId": "LR-GOLDEN-1",
-    "runNo": 1
+    "runNo": 1,
+    "loanProcess": "fresh"
   },
   "mocks": {
     "core.fetchCustomerByLoanRequest@1": {
@@ -42,14 +43,22 @@
         }
       }
     },
-    "axis.precheck.invoke@1": {
-      "transport": {
-        "sent": true,
-        "timeout": true
+    "axis.precheck.timble@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "status": "SUCCESS",
+          "reference_id": "TIMBLE-REF-1"
+        }
       }
     }
   },
   "expect": {
-    "failure": "L1_UNKNOWN"
+    "outcome": "INITIATED",
+    "calls": {
+      "precheck.audit.insert@1": {
+        "params.remarks": "Axis precheck initiated. applicantId=null, clientLoanId=null, timbleReferenceId=TIMBLE-REF-1"
+      }
+    }
   }
 }
