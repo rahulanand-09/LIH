@@ -1,5 +1,8 @@
 {
-  "name": "axis status: all clear (any customer)",
+  "name": "axis status: first poll WIP (reset with __admin/scenarios/reset)",
+  "scenarioName": "status",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "clear",
   "request": {
     "method": "POST",
     "urlPath": "/investor_integration/actions/invoke_api",
@@ -22,7 +25,7 @@
     "jsonBody": {
       "dedupe": "Y",
       "pan": "Y",
-      "ramp": "Y",
+      "ramp": "WIP",
       "hunter": "Y"
     }
   }

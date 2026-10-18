@@ -29,11 +29,21 @@ public final class TaskActivityImpl implements TaskActivity {
 
     @Override
     public TaskResult runTask(TaskRequest request) {
+        long start = System.nanoTime();
+        int attempt = Activity.getExecutionContext().getInfo().getAttempt();
+        // inputs carry ids only (no customer data, by contract), so they are safe to log
+        LOG.info("[L1 {}] ▶ {}@{} runNo={} attempt={} inputs={}", request.caseId(), request.recipeRef(),
+                request.recipeVersion(), request.runNo(), attempt, request.inputs());
         try {
-            return runner.run(request, stepId -> Activity.getExecutionContext().heartbeat(stepId));
+            TaskResult result = runner.run(request, stepId -> Activity.getExecutionContext().heartbeat(stepId));
+            // outputs passed the output guard: declared, non-PII values only
+            LOG.info("[L1 {}] ◀ {}@{} → {} outputs={} ({} ms)", request.caseId(), request.recipeRef(),
+                    request.recipeVersion(), result.outcome(), result.outputs(), (System.nanoTime() - start) / 1_000_000);
+            return result;
         } catch (L1Failure f) {
-            LOG.warn("RunTask {}@{} case {} failed: {}", request.recipeRef(), request.recipeVersion(),
-                    request.caseId(), f.getMessage());
+            LOG.warn("[L1 {}] ✖ {}@{} failed as {} ({} ms): {}", request.caseId(), request.recipeRef(),
+                    request.recipeVersion(), f.errorClass().failureType(), (System.nanoTime() - start) / 1_000_000,
+                    f.getMessage());
             throw f.toApplicationFailure(request.recipeRef(), request.recipeVersion());
         } catch (ApplicationFailure f) {
             throw f;

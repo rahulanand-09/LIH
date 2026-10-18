@@ -2,8 +2,10 @@
 
 For the L2 owner. L1 is ready: every Axis precheck step is a published recipe. L2 calls them through Temporal and
 routes only on the outcome labels. A working reference is
-`src/test/java/com/rupeek/l1/reference/ReferenceAxisPrecheckWorkflowImpl.java`, about 100 lines, run end to end
-by `ReferenceAxisPrecheckFlowTest`. It shows the whole contract in code.
+`src/main/java/com/rupeek/l1/dev/ReferenceAxisPrecheckWorkflowImpl.java`, about 150 lines with logging. It is
+dev-only, enabled by `l1.dev.reference-workflow=true`, and runs end to end in `ReferenceAxisPrecheckFlowTest` and
+locally with `dev/l1-local/l1-local.sh precheck LR-OK-1` (see [`l1-local-testing.md`](l1-local-testing.md)).
+It shows the whole contract in code: one workflow per case, calling the L1 activities.
 
 ## 1. The two activities
 

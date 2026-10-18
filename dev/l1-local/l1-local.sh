@@ -8,8 +8,9 @@
 #   dev/l1-local/l1-local.sh publish        # validate + publish src/main/resources/l1-config to local lih_config
 #   dev/l1-local/l1-local.sh config ARGS    # any config CLI command, e.g. config status
 #   dev/l1-local/l1-local.sh probe LR-OK-1 [runNo] [recipeVersion]  # RunTask(axis.precheck.dedupe)
+#   dev/l1-local/l1-local.sh precheck LR-OK-1 [Y|N] [pollSeconds]  # whole Axis precheck in ONE workflow + timeline
+#   dev/l1-local/l1-local.sh timeline <workflowId>                  # readable history of any workflow
 #   dev/l1-local/l1-local.sh run-recipe axis.precheck.timble '{"loanRequestId":"LR-OK-1","runNo":1,"loanProcess":"fresh"}'
-
 #
 # Scenarios are picked by the loanRequestId prefix: LR-OK, LR-REJECT, LR-503, LR-500, LR-NOCORE
 # (see docs/l1-local-testing.md). Point CORE_BASEURL / AXIS_PRECHECK_BASEURL and the two secrets at real
@@ -59,7 +60,7 @@ app() {
   use_java
   cd "$ROOT"
   exec mvn -B ${java_args[@]+"${java_args[@]}"} spring-boot:run \
-    -Dspring-boot.run.arguments="--l1.enabled=true --l1.env=local --l1.dev.probe-workflow=true --l1.registry.mode=$L1_REGISTRY"
+    -Dspring-boot.run.arguments="--l1.enabled=true --l1.env=local --l1.dev.probe-workflow=true --l1.dev.reference-workflow=true --l1.registry.mode=$L1_REGISTRY"
 }
 
 config() {
@@ -75,6 +76,32 @@ probe() {
   temporal workflow execute --type L1Probe --task-queue lih-l1 \
     --workflow-id "l1-probe-$lr-r$run-$(date +%s)" \
     --input "{\"recipeRef\":\"axis.precheck.dedupe\",\"recipeVersion\":$ver,\"caseId\":\"l1-probe-$lr\",\"runNo\":$run,\"inputs\":{\"loanRequestId\":\"$lr\",\"runNo\":$run,\"loanProcess\":\"fresh\"}}"
+}
+
+# The whole Axis precheck in ONE workflow (the dev reference L2): precheck LR-OK-1 [Y|N name_match] [pollSeconds] [runNo]
+precheck() {
+  local lr="${1:?usage: precheck <loanRequestId> [Y|N] [pollSeconds] [runNo]}" match="${2:-Y}" poll="${3:-10}" run="${4:-1}"
+  local prefix customer wf
+  prefix="$(echo "$lr" | sed -E 's/^LR-([A-Z0-9]+).*/\1/')"; customer="CUST-$prefix"   # matches the Core stubs
+  wf="axis-precheck-$lr-r$run"
+  curl -s -X POST "localhost:$STUB_PORT/__admin/scenarios/reset" >/dev/null || true      # first status poll: WIP
+  echo "▶ starting workflow $wf (queue l2-reference); watch the app terminal for [L2 …] and [L1 …] logs"
+  temporal workflow start --type ReferenceAxisPrecheckWorkflow --task-queue l2-reference --workflow-id "$wf" \
+    --input "{\"loanRequestId\":\"$lr\",\"loanProcess\":\"fresh\",\"runNo\":$run,\"pollEverySeconds\":$poll}" >/dev/null
+  sleep 3
+  echo "✉ sending the Timble callback (customer $customer, name_match=$match), as L2's callback endpoint would"
+  temporal workflow signal --workflow-id "$wf" --name timbleCallback \
+    --input "{\"product_id\":\"P1\",\"customer_id\":\"$customer\",\"timble_status\":\"COMPLETED\",\"name_match\":\"$match\",\"aadhar_match\":\"Y\"}" >/dev/null
+  echo "… waiting for the result (status is polled every ${poll}s)"
+  temporal workflow result --workflow-id "$wf" | grep -E "Status|Result " || true
+  echo
+  python3 "$ROOT/dev/l1-local/timeline.py" "$wf"
+  echo
+  echo "UI: http://localhost:8233/namespaces/default/workflows/$wf"
+}
+
+timeline() {
+  python3 "$ROOT/dev/l1-local/timeline.py" "${1:?usage: timeline <workflowId>}"
 }
 
 # Any recipe: run-recipe axis.precheck.status '{"loanRequestId":"LR-OK-1"}' [recipeVersion]
@@ -94,5 +121,7 @@ case "$cmd" in
   config) config "$@" ;;
   probe) probe "$@" ;;
   run-recipe) run_recipe "$@" ;;
-  *) sed -n '2,16p' "$0"; exit 1 ;;
+  precheck) precheck "$@" ;;
+  timeline) timeline "$@" ;;
+  *) sed -n '2,18p' "$0"; exit 1 ;;
 esac

@@ -32,6 +32,34 @@ dev/l1-local/l1-local.sh probe LR-OK-5 1 2           # run recipe version 2 (3rd
 Publishing a new version while the app is running takes effect without a restart. See
 [`l1-config-publishing.md`](l1-config-publishing.md).
 
+## The whole Axis precheck in one workflow (demo)
+
+`app` also starts a dev-only reference L2 workflow on queue `l2-reference`. It does what L2 will do: one workflow
+per case, calling the L1 activities on `lih-l1`.
+
+Use three terminals: `infra`, `stubs` and `app` (as above). Keep the **app** terminal visible: every case logs
+`[L2 <case>]` lines (the workflow's decisions) and `[L1 <case>]` lines (each task, step and call). In a fourth:
+
+```bash
+dev/l1-local/l1-local.sh precheck LR-OK-1          # approved: dedupe → timble → callback → status (WIP, then Y) → notify
+dev/l1-local/l1-local.sh precheck LR-OK-2 N        # Timble name mismatch → status FAILURE → notify failed → REJECTED
+dev/l1-local/l1-local.sh precheck LR-OK-3 Y 30     # poll status every 30 s instead of 10 s
+dev/l1-local/l1-local.sh timeline axis-precheck-LR-OK-1-r1     # print the timeline again
+```
+
+`precheck`:
+1. starts the workflow (`axis-precheck-<loanRequestId>-r1`);
+2. sends the Timble callback as a signal, like L2's callback endpoint would;
+3. waits for the result;
+4. prints a timeline of every activity with its outcome, plus the signal and the timers.
+
+The first status poll answers `WIP` on purpose, so you see a PENDING → wait → poll again. Use a new loanRequestId
+for each run, or the dedupe step finds the earlier record. The same run is in the Temporal UI at
+http://localhost:8233.
+
+To follow only one case in the app log, filter it, for example: `grep "LR-OK-1-r1"`.
+Logs never contain request or response bodies: only ids, outcomes, URLs without query, Mongo actions and timings.
+
 ## Run a scenario
 
 ```bash

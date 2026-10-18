@@ -79,9 +79,16 @@ public class L1Properties {
     public static class Dev {
         /** Register the dev-only {@code L1Probe} workflow on the L1 task queue, to run {@code RunTask} without L2. */
         private boolean probeWorkflow = false;
+        /** Run the dev-only reference L2 workflow (whole Axis precheck in one workflow) on its own task queue. */
+        private boolean referenceWorkflow = false;
+        private String referenceTaskQueue = "l2-reference";
 
         public boolean isProbeWorkflow() { return probeWorkflow; }
         public void setProbeWorkflow(boolean probeWorkflow) { this.probeWorkflow = probeWorkflow; }
+        public boolean isReferenceWorkflow() { return referenceWorkflow; }
+        public void setReferenceWorkflow(boolean referenceWorkflow) { this.referenceWorkflow = referenceWorkflow; }
+        public String getReferenceTaskQueue() { return referenceTaskQueue; }
+        public void setReferenceTaskQueue(String referenceTaskQueue) { this.referenceTaskQueue = referenceTaskQueue; }
     }
 
     public boolean isEnabled() { return enabled; }

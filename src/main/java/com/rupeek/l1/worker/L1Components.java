@@ -15,6 +15,7 @@ import com.rupeek.l1.expr.fn.RkFunctions;
 import com.rupeek.l1.intercept.AuditInterceptor;
 import com.rupeek.l1.intercept.AuditWriter;
 import com.rupeek.l1.intercept.InterceptorChain;
+import com.rupeek.l1.intercept.LoggingInterceptor;
 import com.rupeek.l1.intercept.MetricsInterceptor;
 import com.rupeek.l1.intercept.OperationInterceptor;
 import com.rupeek.l1.intercept.PiiMasker;
@@ -108,6 +109,7 @@ public record L1Components(
         PiiMasker masker = new PiiMasker();
         List<OperationInterceptor> interceptors = new ArrayList<>();
         interceptors.add(new TracingInterceptor(s.observations()));
+        interceptors.add(new LoggingInterceptor());
         interceptors.add(new MetricsInterceptor(s.meters()));
         if (s.auditWriter() != null) {
             interceptors.add(new AuditInterceptor(s.auditWriter(), masker, s.clock()));

@@ -115,7 +115,7 @@ All new code lives under `com.rupeek.l1`. No class names a lender.
 | `l1.publish` | `Publisher`, `ConfigBundle`, `SchemaValidator`, `GoldenRunner`, `GoldenCase`, `PublishReport`; `cli.L1ConfigCli` | Validate (schema, versions, compile, golden) and store new versions; CLI for CI |
 | `l1.secrets` | `SecretResolver`, `EnvSecretResolver` | `secretRef` → value at call time |
 | `l1.worker` | `TaskActivityImpl`, `L1Components` (the single wiring path), `L1AutoConfiguration`, `L1Properties`, `L1TemporalWorker` | Temporal activity + worker start-up |
-| `l1.dev` | `L1ProbeWorkflow` | Dev-only workflow that calls `RunTask` without L2 (`l1.dev.probe-workflow=true`) |
+| `l1.dev` | `L1ProbeWorkflow`, `ReferenceAxisPrecheckWorkflow` | Dev only. The probe runs one `RunTask` (`l1.dev.probe-workflow=true`). The reference L2 runs the whole Axis precheck in one workflow on queue `l2-reference` (`l1.dev.reference-workflow=true`) |
 
 Dependency direction: `worker → {engine, registry}`; `registry → engine` (implements `RecipeSource`, `ResourceProvider`); `engine → {expr, ops, intercept, model}`; `ops`/`intercept` → `model`/`expr`; `api` depends on nothing. No cycles.
 
@@ -868,7 +868,7 @@ Expected load is small (≈ 500 cases/day × 10–12 steps).
 | Start-up | Compile all config → refuse to start on errors → start polling |
 | Shutdown | Stop polling; finish running activities up to 60 s |
 | Health | Liveness: process; readiness: config compiled, Mongo + Temporal reachable |
-| Config | `l1.enabled` (default `false`), `l1.env` (`local`/`qa`/`uat`/`prod`), `l1.config-location` (`classpath:l1-config`), `l1.mongo-datasource`, `l1.registry.{mode,uri,database,resource-ttl}`, `l1.temporal.{enabled,target,namespace,task-queue,max-concurrent-activities}`, `l1.audit.{enabled,database,queue-capacity}`, `l1.dev.probe-workflow` |
+| Config | `l1.enabled` (default `false`), `l1.env` (`local`/`qa`/`uat`/`prod`), `l1.config-location` (`classpath:l1-config`), `l1.mongo-datasource`, `l1.registry.{mode,uri,database,resource-ttl}`, `l1.temporal.{enabled,target,namespace,task-queue,max-concurrent-activities}`, `l1.audit.{enabled,database,queue-capacity}`, `l1.dev.{probe-workflow,reference-workflow,reference-task-queue}` |
 | Wiring | `L1AutoConfiguration` is a Spring Boot auto-configuration (no component scan needed) and is off unless `l1.enabled=true`; start-up fails fast if config does not compile or Temporal is unreachable |
 
 ---

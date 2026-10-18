@@ -1,4 +1,4 @@
-package com.rupeek.l1.reference;
+package com.rupeek.l1.dev;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
@@ -106,7 +106,7 @@ class ReferenceAxisPrecheckFlowTest {
     private ReferenceAxisPrecheckWorkflow start(String loanRequestId, Map<String, Object> callback) {
         ReferenceAxisPrecheckWorkflow wf = client.newWorkflowStub(ReferenceAxisPrecheckWorkflow.class,
                 WorkflowOptions.newBuilder().setTaskQueue("lih-l1").setWorkflowId("axis-precheck-" + loanRequestId).build());
-        WorkflowClient.start(wf::run, loanRequestId, "fresh", 1);
+        WorkflowClient.start(wf::run, new ReferenceAxisPrecheckWorkflow.Start(loanRequestId, "fresh", 1, null));
         if (callback != null) {
             wf.timbleCallback(callback);
         }

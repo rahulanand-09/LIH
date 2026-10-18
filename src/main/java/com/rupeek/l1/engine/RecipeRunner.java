@@ -17,6 +17,8 @@ import java.time.Clock;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Runs one recipe attempt: steps in order, each with its guard, then the operation; early returns; {@code onError}
@@ -26,6 +28,8 @@ import java.util.Map;
  * stored ids, upsert before calling the lender). There is no step journal.
  */
 public final class RecipeRunner {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RecipeRunner.class);
 
     /** Called before each step; in an activity it heartbeats (and surfaces cancellation). */
     @FunctionalInterface
@@ -102,28 +106,39 @@ public final class RecipeRunner {
             try {
                 if (step.when() != null && !ctx.evalBool(step.when())) {
                     ctx.trace(step.id(), opRef, "SKIPPED", elapsed(start));
+                    logStep(request, step, opRef, "skipped", start);
                     continue;
                 }
                 if (step.isReturn()) {
                     ctx.trace(step.id(), null, "RETURNED", elapsed(start));
+                    logStep(request, step, null, "return " + step.returnSpec().outcome(), start);
                     return finish(recipe, ctx, step.returnSpec().outcome(), step.returnSpec().out());
                 }
                 Map<String, Object> params = ctx.evalMap(step.in());
                 ctx.record(step.id(), invoker.invoke(step, params, ctx));
                 ctx.trace(step.id(), opRef, "OK", elapsed(start));
+                logStep(request, step, opRef, "ok", start);
             } catch (ExprEvalException e) {
                 ctx.trace(step.id(), opRef, "PERMANENT", elapsed(start));
+                logStep(request, step, opRef, "PERMANENT (expression)", start);
                 throw masked(new L1Failure(ErrorClass.PERMANENT, e.getMessage(), step.id(), opRef, null, e), ctx, step.id(), opRef);
             } catch (L1Failure f) {
                 ctx.trace(step.id(), opRef, f.errorClass().name(), elapsed(start));
                 OnError action = step.onError().getOrDefault(f.errorClass(), OnError.RAISE);
                 if (!action.raises()) {
+                    logStep(request, step, opRef, f.errorClass().name() + " → onError return " + action.returnOutcome(), start);
                     return finish(recipe, ctx, action.returnOutcome(), Map.of());
                 }
+                logStep(request, step, opRef, f.errorClass().name() + " → raise", start);
                 throw masked(f, ctx, step.id(), opRef);
             }
         }
         return finish(recipe, ctx, recipe.returnSpec().outcome(), recipe.returnSpec().out());
+    }
+
+    private static void logStep(TaskRequest request, CompiledRecipe.Step step, String opRef, String what, long start) {
+        LOG.info("[L1 {}]   {} │ step {} {} ({} ms){}", request.caseId(), request.recipeRef(), step.id(), what,
+                (System.nanoTime() - start) / 1_000_000, opRef == null ? "" : "  [" + opRef + "]");
     }
 
     private TaskResult finish(CompiledRecipe recipe, StepContext ctx, String outcome,

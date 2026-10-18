@@ -1,0 +1,31 @@
+{
+  "name": "axis status: then all clear",
+  "scenarioName": "status",
+  "requiredScenarioState": "clear",
+  "request": {
+    "method": "POST",
+    "urlPath": "/investor_integration/actions/invoke_api",
+    "headers": {
+      "API-key": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "type": {
+        "equalTo": "dedupe_status"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "dedupe": "Y",
+      "pan": "Y",
+      "ramp": "Y",
+      "hunter": "Y"
+    }
+  }
+}

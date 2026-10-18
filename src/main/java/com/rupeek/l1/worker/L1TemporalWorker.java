@@ -1,6 +1,7 @@
 package com.rupeek.l1.worker;
 
 import com.rupeek.l1.dev.L1ProbeWorkflowImpl;
+import com.rupeek.l1.dev.ReferenceAxisPrecheckWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
@@ -25,17 +26,17 @@ public final class L1TemporalWorker implements SmartLifecycle {
     private final L1Properties.Temporal settings;
     private final TaskActivityImpl activity;
     private final RegistryActivityImpl registry;
-    private final boolean probeWorkflow;
+    private final L1Properties.Dev dev;
     private WorkflowServiceStubs stubs;
     private WorkerFactory factory;
     private volatile boolean running;
 
     public L1TemporalWorker(L1Properties.Temporal settings, TaskActivityImpl activity, RegistryActivityImpl registry,
-                            boolean probeWorkflow) {
+                            L1Properties.Dev dev) {
         this.settings = settings;
         this.activity = activity;
         this.registry = registry;
-        this.probeWorkflow = probeWorkflow;
+        this.dev = dev;
     }
 
     @Override
@@ -49,9 +50,15 @@ public final class L1TemporalWorker implements SmartLifecycle {
                 .setMaxConcurrentActivityExecutionSize(settings.getMaxConcurrentActivities())
                 .build());
         worker.registerActivitiesImplementations(activity, registry);
-        if (probeWorkflow) {
+        if (dev.isProbeWorkflow()) {
             worker.registerWorkflowImplementationTypes(L1ProbeWorkflowImpl.class);
             LOG.warn("L1 dev probe workflow is registered; do not enable l1.dev.probe-workflow outside local/qa");
+        }
+        if (dev.isReferenceWorkflow()) {
+            factory.newWorker(dev.getReferenceTaskQueue())
+                    .registerWorkflowImplementationTypes(ReferenceAxisPrecheckWorkflowImpl.class);
+            LOG.warn("Dev reference L2 workflow (ReferenceAxisPrecheckWorkflow) polling task queue '{}'; "
+                    + "do not enable l1.dev.reference-workflow outside local/qa", dev.getReferenceTaskQueue());
         }
         factory.start();
         running = true;
