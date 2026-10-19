@@ -1,0 +1,12 @@
+{
+  "recipe": "axis.decomposed.notifyFail.buildProfileJson",
+  "lender": "axis",
+  "inputs": { "found": "bool", "doc": "map" },
+  "outputs": { "profileJson": "string" },
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "skip", "when": "!input.found", "return": { "outcome": "OK", "out": { "profileJson": "'{}'" } } },
+    { "id": "profile", "op": "map.precheck.lenderCustomerProfile@1", "in": { "doc": "input.doc" } }
+  ],
+  "return": { "outcome": "OK", "out": { "profileJson": "rk.json(steps.profile.value)" } }
+}

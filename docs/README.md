@@ -5,18 +5,28 @@ lendercore's hand-written per-lender Java. A generic interpreter runs each
 lender's flow from published config on Temporal, so onboarding a lender or
 changing its API becomes a config change, not a redeploy.
 
-Current focus is **L2** (the flow layer): design it, build it, test it,
-before any L1 (per-lender task config) work starts. These docs reflect that —
-L1 is referenced only where needed to explain L2's boundary.
+**Current implementation: [`flow-lld.md`](flow-lld.md).** The L1/L2 two-layer
+split described below was scrapped in favour of one recursive flow engine,
+`com.rupeek.flow` — read that doc first for what's actually built and
+running. `com.rupeek.lender.*`/`com.rupeek.lih.*` (the old linear-step-list L2
+stub this superseded) have been deleted from the repo.
 
+The docs below are the design history that got here — L1/L2 boundary
+reasoning, why Temporal, the target flow-config DAG as it was first proposed —
+kept for context, not as a description of the current code:
+
+- [`design.md`](design.md) — single consolidated overview: L1/L2 boundary,
+  the (now superseded) L2 implementation, the target flow-config DAG, the
+  pluggable `TaskExecutor` model, library/hosted-service deployment, namespace
+  multi-tenancy, and the open decision log, all in one doc.
 - [`hld.md`](hld.md) — what LIH is, the L1/L2 split, why Temporal, how the
   service is expected to evolve.
-- [`l2-lld.md`](l2-lld.md) — low-level design of L2: the current POC
-  implementation in this repo, and where it still falls short of the target
-  flow-config spec.
+- [`l2-lld.md`](l2-lld.md) — low-level design of the old L2 stub, and where it
+  fell short of the target flow-config spec.
 - [`temporal-operations.md`](temporal-operations.md) — how this POC talks to
   Temporal today, and the open operational questions (topology, latency)
   still to be answered.
 - [`decision-log.md`](decision-log.md) — L2-scoped open decisions and known
-  gaps carried forward from design review, to work through before/while
-  improving L2.
+  gaps carried forward from design review; several are now resolved in
+  `flow-lld.md` (version pinning, cycle/depth, PARK semantics) rather than
+  still open.

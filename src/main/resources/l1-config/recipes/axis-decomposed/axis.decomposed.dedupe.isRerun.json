@@ -1,0 +1,11 @@
+{
+  "recipe": "axis.decomposed.dedupe.isRerun",
+  "lender": "axis",
+  "inputs": { "found": "bool" },
+  "outputs": {},
+  "outcomes": ["RERUN", "FRESH"],
+  "steps": [
+    { "id": "check", "when": "input.found", "return": { "outcome": "RERUN" } }
+  ],
+  "return": { "outcome": "FRESH" }
+}
