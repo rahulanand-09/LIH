@@ -1,0 +1,24 @@
+{
+  "name": "core REJECT",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/support/fetchloandetailsv2",
+    "headers": {
+      "Authorization": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "loanRequestIds": {
+        "matches": "LR-REJECT(-.*)?"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "core-reject.json"
+  }
+}

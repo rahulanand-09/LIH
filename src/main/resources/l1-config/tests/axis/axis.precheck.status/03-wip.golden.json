@@ -1,0 +1,48 @@
+{
+  "name": "status: a flag is WIP: PENDING, statuses saved, approval untouched",
+  "recipe": "axis.precheck.status",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1"
+  },
+  "mocks": {
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "customerId": "CUST-TEST-1",
+        "applicantId": "APP-TEST-9",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "responseMap": {
+          "timble": {
+            "status": "SUCCESS",
+            "statusMessage": "Timble Precheck Successful"
+          }
+        }
+      }
+    },
+    "axis.precheck.status@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "dedupe": "Y",
+          "pan": "Y",
+          "ramp": "WIP",
+          "hunter": "Y"
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "PENDING",
+    "calls": {
+      "axis.precheck.saveStatusPending@1": {
+        "params.ramp.status": "PENDING",
+        "params.overall.status": "PENDING",
+        "params.overall.statusMessage": "One of the services is giving WIP"
+      }
+    },
+    "notCalled": [
+      "axis.precheck.saveStatusFinal@1",
+      "precheck.audit.recordOutcome@1"
+    ]
+  }
+}

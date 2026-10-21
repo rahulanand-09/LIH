@@ -1,0 +1,42 @@
+{
+  "name": "notify failed: posts the precheck profile",
+  "recipe": "precheck.notify.failed",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1",
+    "lender": "axis"
+  },
+  "mocks": {
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "customerId": "CUST-TEST-1",
+        "applicantId": "APP-TEST-9",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "responseMap": {
+          "timble": {
+            "status": "FAILURE",
+            "statusMessage": "Timble Precheck Failure : {}"
+          },
+          "axisPreCheckStatus": {
+            "status": "FAILURE",
+            "statusMessage": "m"
+          }
+        }
+      }
+    },
+    "rupeekweb.precheck.failure@1": {
+      "resp": {
+        "status": 200
+      }
+    }
+  },
+  "expect": {
+    "outcome": "NOTIFIED",
+    "calls": {
+      "rupeekweb.precheck.failure@1": {
+        "params.loanRequestId": "LR-GOLDEN-1",
+        "params.lender": "axis"
+      }
+    }
+  }
+}

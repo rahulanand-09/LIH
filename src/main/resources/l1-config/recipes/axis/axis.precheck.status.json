@@ -1,0 +1,174 @@
+{
+  "recipe": "axis.precheck.status",
+  "lender": "axis",
+  "inputs": {
+    "loanRequestId": "string"
+  },
+  "outputs": {
+    "dedupe": "string",
+    "pan": "string",
+    "ramp": "string",
+    "hunter": "string",
+    "timble": "string",
+    "finalStatus": "string"
+  },
+  "outcomes": [
+    "SUCCESS",
+    "FAILURE",
+    "PENDING",
+    "ALREADY_FINAL",
+    "NO_PRECHECK"
+  ],
+  "auditKeys": {
+    "loanRequestId": "input.loanRequestId",
+    "customerId": "steps.?existing.?doc.?customerId.orValue(null)"
+  },
+  "steps": [
+    {
+      "id": "existing",
+      "op": "precheck.findByLoanRequest@1",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'"
+      }
+    },
+    {
+      "id": "none",
+      "when": "!steps.existing.found",
+      "return": {
+        "outcome": "NO_PRECHECK"
+      }
+    },
+    {
+      "id": "alreadyFinal",
+      "when": "rk.str(steps.existing.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null), '').upperAscii() in ['SUCCESS', 'FAILURE']",
+      "return": {
+        "outcome": "ALREADY_FINAL",
+        "out": {
+          "finalStatus": "steps.existing.doc.responseMap.axisPreCheckStatus.status"
+        }
+      }
+    },
+    {
+      "id": "request",
+      "op": "map.axis.precheckStatusRequest@1",
+      "in": {
+        "doc": "steps.existing.doc"
+      }
+    },
+    {
+      "id": "call",
+      "op": "axis.precheck.status@1",
+      "in": {
+        "body": "steps.request.value"
+      }
+    },
+    {
+      "id": "timbleFlag",
+      "op": "map.value@1",
+      "in": {
+        "value": "steps.existing.doc.?responseMap.?timble.orValue(null) != null ? (rk.str(steps.existing.doc.responseMap.timble.?status.orValue(null), 'FAILURE').upperAscii() == 'SUCCESS' ? 'Y' : 'N') : 'WIP'"
+      }
+    },
+    {
+      "id": "decision",
+      "op": "map.axis.precheckStatusDecision@1",
+      "in": {
+        "dedupe": "steps.call.dedupe",
+        "pan": "steps.call.pan",
+        "ramp": "steps.call.ramp",
+        "hunter": "steps.call.hunter",
+        "timbleFlag": "steps.timbleFlag.value",
+        "timble": "steps.existing.doc.?responseMap.?timble.orValue(null)"
+      }
+    },
+    {
+      "id": "saveFinal",
+      "op": "axis.precheck.saveStatusFinal@1",
+      "when": "steps.decision.value.outcome in ['SUCCESS', 'FAILURE']",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'",
+        "dedupe": "steps.decision.value.dedupe",
+        "pan": "steps.decision.value.pan",
+        "ramp": "steps.decision.value.ramp",
+        "hunter": "steps.decision.value.hunter",
+        "overall": "steps.decision.value.overall",
+        "approved": "steps.decision.value.outcome == 'SUCCESS'"
+      }
+    },
+    {
+      "id": "savePending",
+      "op": "axis.precheck.saveStatusPending@1",
+      "when": "steps.decision.value.outcome == 'PENDING'",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'",
+        "dedupe": "steps.decision.value.dedupe",
+        "pan": "steps.decision.value.pan",
+        "ramp": "steps.decision.value.ramp",
+        "hunter": "steps.decision.value.hunter",
+        "overall": "steps.decision.value.overall"
+      }
+    },
+    {
+      "id": "fresh",
+      "op": "precheck.findByLoanRequest@1",
+      "when": "steps.decision.value.outcome in ['SUCCESS', 'FAILURE']",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'"
+      }
+    },
+    {
+      "id": "auditOutcome",
+      "op": "precheck.audit.recordOutcome@1",
+      "when": "steps.decision.value.outcome in ['SUCCESS', 'FAILURE']",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'",
+        "status": "steps.decision.value.outcome == 'SUCCESS' ? 'success' : 'failure'",
+        "remarks": "steps.decision.value.overall.statusMessage",
+        "responseMap": "steps.fresh.doc.responseMap"
+      }
+    },
+    {
+      "id": "success",
+      "when": "steps.decision.value.outcome == 'SUCCESS'",
+      "return": {
+        "outcome": "SUCCESS",
+        "out": {
+          "dedupe": "steps.call.dedupe",
+          "pan": "steps.call.pan",
+          "ramp": "steps.call.ramp",
+          "hunter": "steps.call.hunter",
+          "timble": "steps.timbleFlag.value"
+        }
+      }
+    },
+    {
+      "id": "failure",
+      "when": "steps.decision.value.outcome == 'FAILURE'",
+      "return": {
+        "outcome": "FAILURE",
+        "out": {
+          "dedupe": "steps.call.dedupe",
+          "pan": "steps.call.pan",
+          "ramp": "steps.call.ramp",
+          "hunter": "steps.call.hunter",
+          "timble": "steps.timbleFlag.value"
+        }
+      }
+    }
+  ],
+  "return": {
+    "outcome": "PENDING",
+    "out": {
+      "dedupe": "steps.call.dedupe",
+      "pan": "steps.call.pan",
+      "ramp": "steps.call.ramp",
+      "hunter": "steps.call.hunter",
+      "timble": "steps.timbleFlag.value"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "recipe": "axis.decomposed.statusPersist.auditOutcome",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string", "status": "string", "overall": "map" },
+  "outputs": {},
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "fresh", "op": "precheck.findByLoanRequest@1", "in": { "loanRequestId": "input.loanRequestId", "lender": "'axis'" } },
+    { "id": "audit", "op": "precheck.audit.recordOutcome@1", "in": {
+        "loanRequestId": "input.loanRequestId", "lender": "'axis'", "status": "input.status",
+        "remarks": "input.overall.statusMessage", "responseMap": "steps.fresh.doc.responseMap" } }
+  ],
+  "return": { "outcome": "OK" }
+}

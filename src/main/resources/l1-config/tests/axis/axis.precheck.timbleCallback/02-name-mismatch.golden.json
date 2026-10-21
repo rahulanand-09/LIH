@@ -1,0 +1,35 @@
+{
+  "name": "timble callback: name mismatch: FAILURE with the legacy message (keys in lendercore's HashMap order)",
+  "recipe": "axis.precheck.timbleCallback",
+  "input": {
+    "event": {
+      "product_id": "P1",
+      "customer_id": "CUST-TEST-1",
+      "timble_status": "COMPLETED",
+      "name_match": "N",
+      "aadhar_match": "Y",
+      "timble_error_message": "Name mismatch"
+    }
+  },
+  "mocks": {
+    "precheck.findLatestByCustomer@1": {
+      "result": {
+        "loanRequestId": "LR-9",
+        "customerId": "CUST-TEST-1"
+      }
+    }
+  },
+  "expect": {
+    "outcome": "TIMBLE_FAILED",
+    "out": {
+      "timbleOk": false,
+      "loanRequestId": "LR-9"
+    },
+    "calls": {
+      "axis.precheck.saveTimbleStatus@1": {
+        "params.status": "FAILURE",
+        "params.message": "Timble Precheck Failure : {\"timble_error_message\":\"Name mismatch\",\"aadhar_match\":\"Y\",\"name_match\":\"N\"}"
+      }
+    }
+  }
+}

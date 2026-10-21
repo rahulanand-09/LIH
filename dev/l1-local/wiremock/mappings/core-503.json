@@ -1,0 +1,24 @@
+{
+  "name": "core 503",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/support/fetchloandetailsv2",
+    "headers": {
+      "Authorization": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "loanRequestIds": {
+        "matches": "LR-503(-.*)?"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "core-503.json"
+  }
+}

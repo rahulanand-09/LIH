@@ -1,0 +1,31 @@
+{
+  "UserMsg": "SUCCESS",
+  "loandata": [
+    {
+      "customer": {
+        "id": "CUST-REJECT",
+        "firstName": "Ravi",
+        "lastName": "Sharma",
+        "customerProofName": "Ravi Kumar Sharma",
+        "customerPanName": "RAVI KUMAR SHARMA",
+        "customerPhone": "9000000001",
+        "email": "ravi.test@example.com",
+        "gender": "M",
+        "dob": "1990-01-05",
+        "aadhar": "000011112222",
+        "pan": "ABCDE1234F",
+        "customerAddress": "  12,  MG Road   Bengaluru ",
+        "permanentAddress": {
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pin": "560001"
+        },
+        "presentAddress": {
+          "city": "Mysuru",
+          "state": "Karnataka",
+          "pin": "570001"
+        }
+      }
+    }
+  ]
+}

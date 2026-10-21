@@ -1,0 +1,11 @@
+{
+  "recipe": "axis.decomposed.status.none",
+  "lender": "axis",
+  "inputs": { "found": "bool" },
+  "outputs": {},
+  "outcomes": ["NO_PRECHECK", "HAS"],
+  "steps": [
+    { "id": "check", "when": "!input.found", "return": { "outcome": "NO_PRECHECK" } }
+  ],
+  "return": { "outcome": "HAS" }
+}

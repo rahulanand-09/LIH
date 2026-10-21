@@ -1,0 +1,42 @@
+{
+  "op": "precheck.audit.recordOutcome",
+  "kind": "MONGO",
+  "resource": "lendercore-mongo",
+  "params": {
+    "loanRequestId": {
+      "type": "string"
+    },
+    "lender": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "remarks": {
+      "type": "string"
+    },
+    "responseMap": {
+      "type": "map"
+    }
+  },
+  "collection": "LenderCustomerPrecheckAudit",
+  "action": "UPDATE_ONE",
+  "filter": {
+    "loanRequestId": ":loanRequestId",
+    "lenderSlug": ":lender",
+    "precheckStatus": "processed"
+  },
+  "set": {
+    "precheckStatus": ":status",
+    "remarks": ":remarks",
+    "responseMap": ":responseMap",
+    "lastUpdatedOn": ":sys.now",
+    "last_updated": ":sys.now"
+  },
+  "inc": {
+    "version": 1
+  },
+  "out": {
+    "matched": "result.matched"
+  }
+}

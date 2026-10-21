@@ -1,0 +1,31 @@
+{
+  "name": "axis 500",
+  "request": {
+    "method": "POST",
+    "urlPath": "/investor_integration/actions/invoke_api",
+    "headers": {
+      "API-key": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "type": {
+        "equalTo": "dedupe"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.customer_id == 'CUST-500')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "message": "stubbed 500"
+    }
+  }
+}

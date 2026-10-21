@@ -1,0 +1,10 @@
+{
+  "op": "precheck.findByLoanRequest",
+  "kind": "MONGO",
+  "resource": "lendercore-mongo",
+  "params": { "loanRequestId": { "type": "string" }, "lender": { "type": "string" } },
+  "collection": "LenderCustomerPrecheck",
+  "action": "FIND_ONE",
+  "filter": { "loanRequestId": ":loanRequestId", "lenderSlug": ":lender" },
+  "out": { "found": "result != null", "doc": "result" }
+}

@@ -1,0 +1,13 @@
+{
+  "recipe": "axis.decomposed.timble.buildAndCall",
+  "lender": "axis",
+  "inputs": { "customer": "map", "clientLoanId": "string" },
+  "outputs": { "referenceId": "string" },
+  "outcomes": ["OK", "REJECTED"],
+  "steps": [
+    { "id": "request", "op": "map.axis.precheckRequest@1", "in": { "customer": "input.customer", "clientLoanId": "input.clientLoanId" } },
+    { "id": "call", "op": "axis.precheck.timble@1", "in": { "body": "steps.request.value" },
+      "onError": { "BUSINESS": "return:REJECTED" } }
+  ],
+  "return": { "outcome": "OK", "out": { "referenceId": "steps.call.referenceId" } }
+}

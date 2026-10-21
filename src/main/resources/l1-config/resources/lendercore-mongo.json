@@ -1,0 +1,10 @@
+{
+  "resource": "lendercore-mongo",
+  "kind": "MONGO",
+  "datasourceRef": "lendercore",
+  "database": "lendercore",
+  "collections": [
+    "LenderCustomerPrecheck",
+    "LenderCustomerPrecheckAudit"
+  ]
+}

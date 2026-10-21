@@ -1,0 +1,20 @@
+{
+  "name": "notify verified: 4xx is not retried",
+  "recipe": "precheck.notify.verified",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1"
+  },
+  "mocks": {
+    "rupeekweb.precheck.verification@1": {
+      "resp": {
+        "status": 400,
+        "body": {
+          "error": "bad"
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "NOT_ACCEPTED"
+  }
+}

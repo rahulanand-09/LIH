@@ -5,18 +5,3 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27018/lendercore
-
-lih:
-  temporal-target: localhost:7233
-  namespace: default
-  lenders: axis
-  axis-agreement-id: local-agreement
-  core:
-    url: http://localhost:8091
-    customer-data-path: /mock/core/customerdata?
-    token: local-core-token
-  rupeekweb:
-    endpoint: http://localhost:8091/mock/rupeekweb
-    precheck-verification: /precheckverification
-    update-precheck-failure: /precheckfailure
-    admin-token: local-admin-token

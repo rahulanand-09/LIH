@@ -1,0 +1,14 @@
+{
+  "recipe": "axis.decomposed.timble.audit",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string", "customerId": "string", "loanProcess": "string", "applicantId": "string", "clientLoanId": "string", "referenceId": "string" },
+  "outputs": {},
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "audit", "op": "precheck.audit.insert@1", "in": {
+        "loanRequestId": "input.loanRequestId", "lender": "'axis'", "customerId": "input.customerId",
+        "loanProcess": "input.loanProcess", "status": "'processed'",
+        "remarks": "'Axis precheck initiated. applicantId=' + rk.str(input.applicantId, 'null') + ', clientLoanId=' + rk.str(input.clientLoanId, 'null') + ', timbleReferenceId=' + rk.str(input.referenceId, 'null')" } }
+  ],
+  "return": { "outcome": "OK" }
+}

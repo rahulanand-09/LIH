@@ -131,6 +131,27 @@ L2 flow:
   'Running'`. This is today's stand-in for a real `correlate` mechanism —
   see gaps below. The event's `okVar` result maps to HTTP 200/400.
 
+## Decided in L2 design review
+
+- **`project` is dropped from the L2/event vocabulary.** It was proposed in
+  the flow-config audit to let a callback write a queryable projection
+  (e.g. `PrecheckEntityTimble@1`) independent of the flow's own state. But
+  the L1 worker/CEL design already models Mongo writes as a plain operation
+  kind (`MONGO`) inside an L1 recipe — a projection write is just another
+  recipe step, same as the lender HTTP call. Adding a parallel `project`
+  concept at the L2 layer would duplicate that and give L2 a reason to know
+  about lender-specific collections/fields, which is exactly what L2 is
+  supposed to stay unaware of. An event now only ever does `{ "ref":
+  "<L1 recipe>" }` — any Mongo write the callback needs happens inside that
+  recipe.
+- **`events{}` stays a flow-level map, not a field on `WAIT`.** The
+  alternative (folding an event into the WAIT node it answers) works for a
+  single-shot callback, but `axis-precheck.json`'s `status` event is
+  caller-driven and repeatable — it doesn't correspond to one WAIT node at
+  all. A flow-level map also matches reality better: a callback can arrive
+  before the flow reaches its WAIT node, so the engine needs to buffer
+  independent of node position regardless of how the config is shaped.
+
 ## Gap vs. the target L2 flow-config design
 
 Design review settled on a richer L2 model than what's built here. These
@@ -158,9 +179,8 @@ are the concrete differences to resolve as part of "L2 improvement":
    everything once at process startup from the classpath — there's no
    per-case snapshot, no `(ref, version)` keying, nothing published at
    runtime.
-5. **No `project`/`respond`/`correlate` as config concepts.** These three
-   hooks (from the L2 flow-config audit) were identified as the minimum
-   needed to make a real async-callback lender flow (like Axis) work:
+5. **`respond`/`correlate` aren't generalized as config concepts yet**
+   (`project` is intentionally not part of this list — see Decided above):
    - `respond` (map an event outcome to an HTTP status) is effectively
      already here as `okVar` → 200/400 — just not named/generalized that
      way.
@@ -170,9 +190,6 @@ are the concrete differences to resolve as part of "L2 improvement":
      Today it can only correlate on `customerId` (embedded in the workflow
      id), which doesn't disambiguate multiple concurrent cases for the same
      customer — see `decision-log.md`.
-   - `project` (a versioned write of intermediate case state, independent
-     of the main flow's own persistence) doesn't exist — `PERSIST` steps
-     cover today's needs but aren't the same mechanism.
 6. **Error handling is flatter than the target design.** Only a per-`CALL`
    `retries` count exists; there's no `onError` policy (retry-then-PARK vs.
    FAIL), no parked-case state, and no operator resume/skip/fail actions.

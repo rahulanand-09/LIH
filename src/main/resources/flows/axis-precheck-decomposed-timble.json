@@ -1,0 +1,45 @@
+{
+  "flowRef": "axis-precheck-decomposed-timble",
+  "version": 1,
+  "start": "core",
+  "nodes": [
+    { "nodeType": "TASK", "id": "core", "kind": "RECIPE", "taskRef": "axis.decomposed.fetchCore", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "existing", "kind": "RECIPE", "taskRef": "axis.decomposed.findPrecheck", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "seed", "kind": "RECIPE", "taskRef": "axis.decomposed.buildSeed", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "runNo": "$.in.runNo" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "ids", "kind": "RECIPE", "taskRef": "axis.decomposed.stableId", "fields": {},
+      "in": { "seed": "$.seed.outputs.value" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "alreadyDone", "kind": "RECIPE", "taskRef": "axis.decomposed.timble.alreadyDone", "fields": {},
+      "in": { "found": "$.existing.outputs.found", "doc": "$.existing.outputs.doc", "idsValue": "$.ids.outputs.value" },
+      "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "call", "kind": "RECIPE", "taskRef": "axis.decomposed.timble.buildAndCall", "fields": {},
+      "in": { "customer": "$.core.outputs.customer", "clientLoanId": "$.ids.outputs.value" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "save", "kind": "RECIPE", "taskRef": "axis.decomposed.timble.save", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "customerId": "$.core.outputs.customerId",
+        "referenceId": "$.call.outputs.referenceId" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "audit", "kind": "RECIPE", "taskRef": "axis.decomposed.timble.audit", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "customerId": "$.core.outputs.customerId", "loanProcess": "$.in.loanProcess",
+        "applicantId": "$.in.applicantId", "clientLoanId": "$.ids.outputs.value", "referenceId": "$.call.outputs.referenceId" },
+      "onError": { "retries": 5, "then": "PARK" } },
+
+    { "nodeType": "END", "id": "alreadyInitiated", "status": "ALREADY_INITIATED",
+      "outputs": { "timbleReferenceId": "$.alreadyDone.outputs.timbleReferenceId" } },
+    { "nodeType": "END", "id": "rejected", "status": "REJECTED", "outputs": {} },
+    { "nodeType": "END", "id": "initiated", "status": "INITIATED",
+      "outputs": { "timbleReferenceId": "$.call.outputs.referenceId" } }
+  ],
+  "edges": [
+    { "from": "core", "on": "OK", "to": "existing" },
+    { "from": "existing", "on": "OK", "to": "seed" },
+    { "from": "seed", "on": "OK", "to": "ids" },
+    { "from": "ids", "on": "OK", "to": "alreadyDone" },
+    { "from": "alreadyDone", "on": "ALREADY_DONE", "to": "alreadyInitiated" },
+    { "from": "alreadyDone", "on": "NOT_DONE", "to": "call" },
+    { "from": "call", "on": "OK", "to": "save" },
+    { "from": "call", "on": "REJECTED", "to": "rejected" },
+    { "from": "save", "on": "OK", "to": "audit" },
+    { "from": "audit", "on": "OK", "to": "initiated" }
+  ]
+}

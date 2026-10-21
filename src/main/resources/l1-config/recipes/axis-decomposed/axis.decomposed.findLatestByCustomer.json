@@ -1,0 +1,13 @@
+{
+  "recipe": "axis.decomposed.findLatestByCustomer",
+  "lender": "axis",
+  "inputs": { "customerId": "string" },
+  "outputs": { "found": "bool", "doc": "map" },
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "latest", "op": "precheck.findLatestByCustomer@1", "in": { "customerId": "input.customerId", "lender": "'axis'" } }
+  ],
+  "return": { "outcome": "OK", "out": {
+      "found": "steps.latest.found",
+      "doc": "steps.latest.found ? steps.latest.doc : {}" } }
+}

@@ -1,0 +1,129 @@
+{
+  "recipe": "axis.precheck.dedupe",
+  "lender": "axis",
+  "inputs": {
+    "loanRequestId": "string",
+    "runNo": "int",
+    "loanProcess": "string"
+  },
+  "outputs": {
+    "applicantId": "string",
+    "clientLoanId": "string"
+  },
+  "outcomes": [
+    "INITIATED",
+    "ALREADY_INITIATED",
+    "IN_PROGRESS",
+    "REJECTED"
+  ],
+  "auditKeys": {
+    "loanRequestId": "input.loanRequestId",
+    "customerId": "steps.?core.?customer.?id.orValue(null)"
+  },
+  "steps": [
+    {
+      "id": "core",
+      "op": "core.fetchCustomerByLoanRequest@1",
+      "in": {
+        "loanRequestId": "input.loanRequestId"
+      }
+    },
+    {
+      "id": "existing",
+      "op": "precheck.findByLoanRequest@1",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'"
+      }
+    },
+    {
+      "id": "ids",
+      "op": "gen.stableId@1",
+      "in": {
+        "reuse": "''",
+        "seed": "input.loanRequestId + ':r' + string(input.runNo) + ':axis-dedupe'"
+      }
+    },
+    {
+      "id": "alreadyDone",
+      "when": "steps.existing.found && steps.existing.doc.?clientLoanId.orValue('') == steps.ids.value && rk.str(steps.existing.doc.?applicantId.orValue(null), '') != ''",
+      "return": {
+        "outcome": "ALREADY_INITIATED",
+        "out": {
+          "applicantId": "steps.existing.doc.applicantId",
+          "clientLoanId": "steps.ids.value"
+        }
+      }
+    },
+    {
+      "id": "auditSkip",
+      "op": "precheck.audit.insert@1",
+      "when": "steps.existing.found && steps.existing.doc.?clientLoanId.orValue('') != steps.ids.value && !(rk.str(steps.existing.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null), '').upperAscii() in ['SUCCESS', 'FAILURE'])",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'",
+        "customerId": "rk.str(steps.core.customer.id)",
+        "loanProcess": "input.loanProcess",
+        "status": "'skip'",
+        "remarks": "'API call skipped - Axis precheck already initiated and not yet completed'"
+      }
+    },
+    {
+      "id": "inProgress",
+      "when": "steps.existing.found && steps.existing.doc.?clientLoanId.orValue('') != steps.ids.value && !(rk.str(steps.existing.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null), '').upperAscii() in ['SUCCESS', 'FAILURE'])",
+      "return": {
+        "outcome": "IN_PROGRESS"
+      }
+    },
+    {
+      "id": "request",
+      "op": "map.axis.precheckRequest@1",
+      "in": {
+        "customer": "steps.core.customer",
+        "clientLoanId": "steps.ids.value"
+      }
+    },
+    {
+      "id": "call",
+      "op": "axis.precheck.invoke@1",
+      "in": {
+        "type": "'dedupe'",
+        "body": "steps.request.value"
+      },
+      "onError": {
+        "BUSINESS": "return:REJECTED"
+      }
+    },
+    {
+      "id": "save",
+      "op": "axis.precheck.saveDedupe@1",
+      "when": "!steps.existing.found",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'",
+        "customerId": "rk.str(steps.core.customer.id)",
+        "applicantId": "steps.call.applicantId",
+        "clientLoanId": "steps.ids.value"
+      }
+    },
+    {
+      "id": "saveRerun",
+      "op": "axis.precheck.saveDedupeRerun@1",
+      "when": "steps.existing.found",
+      "in": {
+        "loanRequestId": "input.loanRequestId",
+        "lender": "'axis'",
+        "customerId": "rk.str(steps.core.customer.id)",
+        "applicantId": "steps.call.applicantId",
+        "clientLoanId": "steps.ids.value"
+      }
+    }
+  ],
+  "return": {
+    "outcome": "INITIATED",
+    "out": {
+      "applicantId": "steps.call.applicantId",
+      "clientLoanId": "steps.ids.value"
+    }
+  }
+}
