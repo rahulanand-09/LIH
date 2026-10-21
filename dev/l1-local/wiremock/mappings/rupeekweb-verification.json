@@ -1,0 +1,21 @@
+{
+  "name": "rupeekweb-verification",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/loanrequest/precheck-verification",
+    "headers": {
+      "Authorization": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "op": "axis.precheck.timble",
+  "kind": "HTTP",
+  "resource": "axis-precheck",
+  "params": {
+    "body": {
+      "type": "map",
+      "pii": true
+    }
+  },
+  "request": {
+    "method": "POST",
+    "path": "/investor_integration/actions/invoke_api",
+    "query": {
+      "type": "dedupe_timble"
+    },
+    "body": "=params.body"
+  },
+  "success": "resp.status == 200 && resp.body.?errors.orValue([]).size() == 0",
+  "classify": "resp.status == 500 ? 'UNKNOWN' : resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
+  "out": {
+    "referenceId": "resp.body.?reference_id.orValue(null)"
+  },
+  "audit": "PRECHECK_TIMBLE",
+  "piiPaths": [
+    "$.aadhar_number",
+    "$.dedupe_ids[*].id_value",
+    "$.mobile_number",
+    "$.email",
+    "$.date_of_birth",
+    "$.date_of_birth_as_per_pan",
+    "$.address[*].address_value"
+  ]
+}

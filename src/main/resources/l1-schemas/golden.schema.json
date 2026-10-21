@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rupeek.com/l1/golden.schema.json",
+  "title": "L1 golden test case",
+  "description": "Runs a recipe with mocked operations and checks the outcome, outputs and calls. HTTP operations must be mocked; MAP and GEN run for real; unmocked MONGO operations hit an in-memory recorder (reads find nothing).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "recipe", "input", "expect"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "recipe": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-zA-Z0-9_-]+)+(@[1-9][0-9]*)?$", "description": "ref or ref@version (default: highest version in the bundle)" },
+    "input": { "type": "object" },
+    "runNo": { "type": "integer", "minimum": 1 },
+    "now": { "type": "string", "format": "date-time" },
+    "mocks": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9]+(\\.[a-zA-Z0-9_-]+)+@[1-9][0-9]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "maxProperties": 1,
+        "properties": {
+          "resp": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status"],
+            "properties": { "status": { "type": "integer" }, "headers": { "type": "object" }, "body": {} }
+          },
+          "result": {},
+          "transport": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sent"],
+            "properties": { "sent": { "type": "boolean" }, "timeout": { "type": "boolean" } }
+          }
+        }
+      }
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outcome": { "type": "string" },
+        "failure": { "enum": ["L1_TECHNICAL", "L1_BUSINESS", "L1_UNKNOWN", "L1_PERMANENT"] },
+        "out": { "type": "object" },
+        "calls": { "type": "object", "additionalProperties": { "type": "object" } },
+        "notCalled": { "type": "array", "items": { "type": "string" } }
+      },
+      "oneOf": [ { "required": ["outcome"] }, { "required": ["failure"] } ]
+    }
+  }
+}

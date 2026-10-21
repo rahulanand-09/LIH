@@ -1,0 +1,18 @@
+{
+  "op": "axis.precheck.invoke",
+  "kind": "HTTP",
+  "resource": "axis-precheck",
+  "params": { "type": { "type": "string" }, "body": { "type": "map", "pii": true } },
+  "request": {
+    "method": "POST",
+    "path": "/investor_integration/actions/invoke_api",
+    "query": { "type": "=params.type" },
+    "body": "=params.body"
+  },
+  "success": "resp.status == 200 && resp.body.?errors.orValue([]).size() == 0 && has(resp.body.data)",
+  "classify": "resp.status == 500 ? 'UNKNOWN' : resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
+  "out": { "applicantId": "resp.body.?data.?applicantId.orValue(null)" },
+  "audit": "={'dedupe': 'PRECHECK_DEDUPE', 'dedupe_timble': 'PRECHECK_TIMBLE', 'dedupe_status': 'PRECHECK_STATUS'}[params.type]",
+  "piiPaths": ["$.aadhar_number", "$.dedupe_ids[*].id_value", "$.mobile_number", "$.email",
+               "$.date_of_birth", "$.date_of_birth_as_per_pan", "$.address[*].address_value"]
+}

@@ -1,0 +1,47 @@
+{
+  "op": "map.axis.precheckStatusDecision",
+  "kind": "MAP",
+  "params": {
+    "dedupe": {
+      "type": "string"
+    },
+    "pan": {
+      "type": "string"
+    },
+    "ramp": {
+      "type": "string"
+    },
+    "hunter": {
+      "type": "string"
+    },
+    "timbleFlag": {
+      "type": "string"
+    },
+    "timble": {
+      "type": "dyn"
+    }
+  },
+  "template": {
+    "outcome": "=cel.bind(f, [params.dedupe, params.pan, params.ramp, params.hunter, params.timbleFlag], f.all(x, x == 'Y') ? 'SUCCESS' : f.exists(x, x == 'N') ? 'FAILURE' : 'PENDING')",
+    "dedupe": {
+      "status": "={'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.dedupe]",
+      "statusMessage": ""
+    },
+    "pan": {
+      "status": "={'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.pan]",
+      "statusMessage": ""
+    },
+    "ramp": {
+      "status": "={'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.ramp]",
+      "statusMessage": ""
+    },
+    "hunter": {
+      "status": "={'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.hunter]",
+      "statusMessage": ""
+    },
+    "overall": "=cel.bind(o, cel.bind(f, [params.dedupe, params.pan, params.ramp, params.hunter, params.timbleFlag], f.all(x, x == 'Y') ? 'SUCCESS' : f.exists(x, x == 'N') ? 'FAILURE' : 'PENDING'), o == 'SUCCESS' ? {'status': 'SUCCESS', 'statusMessage': 'PreCheck success for the loanRequest'} : o == 'FAILURE' ? {'status': 'FAILURE', 'statusMessage': 'Precheck failure received from lender services : ' + rk.json({'customerAcceptanceStatus': null, 'customerBlacklistStatus': null, 'axisPreCheckStatus': null, 'dedupe': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.dedupe], 'statusMessage': ''}, 'pan': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.pan], 'statusMessage': ''}, 'ramp': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.ramp], 'statusMessage': ''}, 'hunter': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[params.hunter], 'statusMessage': ''}, 'timble': params.timble == null ? null : dyn({'status': params.timble.?status.orValue(null), 'statusMessage': params.timble.?statusMessage.orValue(null)})})} : {'status': 'PENDING', 'statusMessage': 'One of the services is giving WIP'})"
+  },
+  "out": {
+    "value": "result"
+  }
+}

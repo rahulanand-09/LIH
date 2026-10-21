@@ -1,0 +1,29 @@
+{
+  "name": "axis REJECT",
+  "request": {
+    "method": "POST",
+    "urlPath": "/investor_integration/actions/invoke_api",
+    "headers": {
+      "API-key": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "type": {
+        "equalTo": "dedupe"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.customer_id == 'CUST-REJECT')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "axis-dedupe-errors-in-200.json"
+  }
+}

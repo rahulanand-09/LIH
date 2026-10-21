@@ -1,0 +1,32 @@
+{
+  "name": "axis status: first poll WIP (reset with __admin/scenarios/reset)",
+  "scenarioName": "status",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "clear",
+  "request": {
+    "method": "POST",
+    "urlPath": "/investor_integration/actions/invoke_api",
+    "headers": {
+      "API-key": {
+        "matches": ".+"
+      }
+    },
+    "queryParameters": {
+      "type": {
+        "equalTo": "dedupe_status"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "dedupe": "Y",
+      "pan": "Y",
+      "ramp": "WIP",
+      "hunter": "Y"
+    }
+  }
+}

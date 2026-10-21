@@ -1,0 +1,83 @@
+{
+  "name": "timble: after dedupe: same body and client_loan_id, reference saved, processed audit row",
+  "recipe": "axis.precheck.timble",
+  "input": {
+    "loanRequestId": "LR-GOLDEN-1",
+    "runNo": 1,
+    "loanProcess": "fresh"
+  },
+  "mocks": {
+    "core.fetchCustomerByLoanRequest@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "UserMsg": "SUCCESS",
+          "loandata": [
+            {
+              "customer": {
+                "id": "CUST-TEST-1",
+                "firstName": "Ravi",
+                "lastName": "Sharma",
+                "customerProofName": "Ravi Kumar Sharma",
+                "customerPanName": "RAVI KUMAR SHARMA",
+                "customerPhone": "9000000001",
+                "email": "ravi.test@example.com",
+                "gender": "M",
+                "dob": "1990-01-05",
+                "aadhar": "000011112222",
+                "pan": "ABCDE1234F",
+                "customerAddress": "  12,  MG Road   Bengaluru ",
+                "permanentAddress": {
+                  "city": "Bengaluru",
+                  "state": "Karnataka",
+                  "pin": "560001"
+                },
+                "presentAddress": {
+                  "city": "Mysuru",
+                  "state": "Karnataka",
+                  "pin": "570001"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "axis.precheck.timble@1": {
+      "resp": {
+        "status": 200,
+        "body": {
+          "status": "SUCCESS",
+          "reference_id": "TIMBLE-REF-1"
+        }
+      }
+    },
+    "precheck.findByLoanRequest@1": {
+      "result": {
+        "loanRequestId": "LR-GOLDEN-1",
+        "clientLoanId": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "applicantId": "APP-TEST-9"
+      }
+    }
+  },
+  "expect": {
+    "outcome": "INITIATED",
+    "out": {
+      "timbleReferenceId": "TIMBLE-REF-1"
+    },
+    "calls": {
+      "axis.precheck.timble@1": {
+        "params.body.client_loan_id": "d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4",
+        "params.body.first_name": "RAVI",
+        "params.body.application_id": null
+      },
+      "axis.precheck.saveTimbleRef@1": {
+        "params.referenceId": "TIMBLE-REF-1"
+      },
+      "precheck.audit.insert@1": {
+        "params.status": "processed",
+        "params.remarks": "Axis precheck initiated. applicantId=APP-TEST-9, clientLoanId=d0964d53-e978-5ab5-a2d7-dc7ec85e5dc4, timbleReferenceId=TIMBLE-REF-1"
+      }
+    }
+  }
+}

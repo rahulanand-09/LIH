@@ -1,0 +1,22 @@
+{
+  "name": "core NOCORE",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/support/fetchloandetailsv2",
+    "queryParameters": {
+      "loanRequestIds": {
+        "matches": "LR-NOCORE(-.*)?"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "UserMsg": "SUCCESS",
+      "loandata": []
+    }
+  }
+}

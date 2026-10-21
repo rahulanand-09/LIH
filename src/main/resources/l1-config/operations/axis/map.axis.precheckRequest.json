@@ -1,0 +1,62 @@
+{
+  "op": "map.axis.precheckRequest",
+  "kind": "MAP",
+  "resource": "axis-precheck",
+  "params": {
+    "customer": {
+      "type": "map",
+      "pii": true
+    },
+    "clientLoanId": {
+      "type": "string"
+    }
+  },
+  "template": {
+    "agreement_id": "=env.preCheckAgreementId",
+    "customer_id": "=rk.str(params.customer.id)",
+    "application_id": null,
+    "client_loan_id": "=params.clientLoanId",
+    "model_name": "CLM1",
+    "customer_type": "individual",
+    "first_name": "=rk.str(rk.nameSplit(params.customer, 'first'))",
+    "middle_name": "=rk.str(rk.nameSplit(params.customer, 'middle'))",
+    "last_name": "=rk.str(rk.nameSplit(params.customer, 'last'))",
+    "name_as_per_pan": "=rk.str(params.customer.?customerPanName.orValue(null))",
+    "date_of_birth": "=rk.str(params.customer.?dob.orValue(null))",
+    "date_of_birth_as_per_pan": "=rk.str(params.customer.?dob.orValue(null))",
+    "mobile_number": "=rk.str(params.customer.?customerPhone.orValue(null))",
+    "email": "=rk.str(params.customer.?email.orValue(null))",
+    "gender": "=rk.str(params.customer.?gender.orValue(null))",
+    "dedupe_type": "single",
+    "aadhar_number": "=rk.str(params.customer.?aadhar.orValue(null))",
+    "dedupe_ids": [
+      {
+        "id_type": "PAN",
+        "id_value": "=rk.str(params.customer.?pan.orValue(null))"
+      },
+      {
+        "id_type": "AADHAR",
+        "id_value": "=rk.str(params.customer.?aadhar.orValue(null))"
+      }
+    ],
+    "address": [
+      {
+        "address_type": "PERMANENT",
+        "address_value": "=regex.replace(params.customer.customerAddress, r'\\s+', ' ').trim()",
+        "address_city": "=rk.str(params.customer.permanentAddress.?city.orValue(null))",
+        "address_state": "=rk.str(params.customer.permanentAddress.?state.orValue(null))",
+        "address_pincode": "=rk.str(params.customer.permanentAddress.?pin.orValue(null))"
+      },
+      {
+        "address_type": "COMMUNICATION",
+        "address_value": "=regex.replace(params.customer.customerAddress, r'\\s+', ' ').trim()",
+        "address_city": "=rk.str(params.customer.?presentAddress.?city.orValue(null))",
+        "address_state": "=rk.str(params.customer.?presentAddress.?state.orValue(null))",
+        "address_pincode": "=rk.str(params.customer.?presentAddress.?pin.orValue(null))"
+      }
+    ]
+  },
+  "out": {
+    "value": "result"
+  }
+}

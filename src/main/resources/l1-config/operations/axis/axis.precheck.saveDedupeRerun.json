@@ -1,0 +1,52 @@
+{
+  "op": "axis.precheck.saveDedupeRerun",
+  "kind": "MONGO",
+  "resource": "lendercore-mongo",
+  "params": {
+    "loanRequestId": {
+      "type": "string"
+    },
+    "lender": {
+      "type": "string"
+    },
+    "customerId": {
+      "type": "string"
+    },
+    "applicantId": {
+      "type": "string"
+    },
+    "clientLoanId": {
+      "type": "string"
+    }
+  },
+  "collection": "LenderCustomerPrecheck",
+  "action": "UPDATE_ONE",
+  "filter": {
+    "loanRequestId": ":loanRequestId",
+    "lenderSlug": ":lender"
+  },
+  "set": {
+    "applicantId": ":applicantId",
+    "clientLoanId": ":clientLoanId",
+    "precheckStatus": "processed",
+    "approved": false,
+    "responseMap": {
+      "axisPreCheckStatus": {
+        "status": "PENDING",
+        "statusMessage": "Precheck re-initiated for the loanRequest"
+      }
+    },
+    "rejectionReason": null,
+    "reference_id": null,
+    "last_updated": ":sys.now"
+  },
+  "inc": {
+    "version": 1
+  },
+  "expect": {
+    "matched": 1
+  },
+  "out": {
+    "matched": "result.matched"
+  }
+}
