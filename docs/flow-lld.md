@@ -27,8 +27,8 @@ only SUBFLOW composition happens in workflow code.
 | `com.rupeek.flow.model` | The node/edge schema — plain data, no Temporal imports. `FlowDef`, the sealed `Node` interface and its six records, `Edge`, `OnError`, `NodeResult`, `OperationKind`. |
 | `com.rupeek.flow.activity` | The engine's own generic leaf-TASK contract (`TaskActivity`/`TaskRequest`/`TaskResult`/`TaskFailureType`) — used by non-`RECIPE` node kinds. Nothing in the Axis precheck flow uses this today (see §7); kept for a future non-L1 operation kind. |
 | `com.rupeek.flow.workflow` | The interpreter itself: `FlowWorkflow` (the one `@WorkflowInterface`, reused at every depth), `FlowWorkflowImpl`, `FlowRunRequest`, `InputResolver`, `ResumeAction`, `FlowState`. |
-| `com.rupeek.flow.registry` | `ResolveFlowActivity` (the engine's own placeholder version-pinning activity, for non-`RECIPE` refs) and `FlowDefLoader` (loads a `FlowDef` from a classpath JSON resource — see §9). |
-| `com.rupeek.l1.*` | Untouched. The real recipe/operation engine — CEL, HTTP/MONGO/MAP/GEN executors, registry, publish pipeline, golden tests. `com.rupeek.flow` depends on exactly two types from it: `com.rupeek.l1.api.TaskActivity` and `com.rupeek.l1.api.RegistryActivity` (see §7). |
+| `com.rupeek.flow.registry` | Version pinning, real now (§9): `ResolveFlowActivity`/`ResolveFlowActivityImpl`, `FetchFlowActivity`/`FetchFlowActivityImpl`, `FlowSource`/`StoreFlowSource`, `FlowRegistryService`, `FlowPublisher`, and `FlowDefLoader` (loads/parses a `FlowDef` from JSON). |
+| `com.rupeek.l1.*` | Mostly untouched — the real recipe/operation engine: CEL, HTTP/MONGO/MAP/GEN executors, registry, publish pipeline, golden tests. `com.rupeek.flow` depends on `com.rupeek.l1.api.TaskActivity`/`RegistryActivity` (§8) and, since §9's real versioning, on the generic (non-recipe-specific) registry plumbing too: `ConfigStore`, `DocType` (now has a third value, `FLOW`), `StoredVersion`, `ConfigCodec`, `MongoConfigStore`/`InMemoryConfigStore` — the SAME store a recipe's own version lives in, one more collection, not a parallel system. |
 
 Deleted entirely as dead code superseded by this package: `com.rupeek.lender.*` (old DTOs/entities) and
 `com.rupeek.lih.*` including the old linear-step-list `com.rupeek.lih.l2.*` stub. Nothing in `com.rupeek.l1`
@@ -56,8 +56,8 @@ graph-control kinds:
 
 | Record | Role | Fields | Notes |
 |---|---|---|---|
-| `TaskNode` | **leaf** — one Activity call | `id, kind, taskRef, fields, in, onError` | `kind` (`OperationKind`) selects *what* the Activity does; `RECIPE` is the one used today (§8) |
-| `SubflowNode` | **composite** — another whole `FlowDef`, run recursively | `id, flowRef, in, onError` | `flowRef` is looked up in `FlowRunRequest.registry()` at runtime, not resolved at parse time (§7) |
+| `TaskNode` | **leaf** — one Activity call | `id, kind, taskRef, fields, in, onError` | `kind` (`OperationKind`: `HTTP/SOAP/SFTP/MONGO/MAP/GEN/RECIPE/CUSTOM`) selects *what* the Activity does; `RECIPE` is the one used today (§8). `CUSTOM` is author-provided, flow-native code — same generic `TaskActivity` contract, just not a platform kind and not an L1 recipe, keyed by a namespaced `taskRef` |
+| `SubflowNode` | **composite** — another whole `FlowDef`, run recursively (or spliced in — `inline`, §7a) | `id, flowRef, in, onError, inline` | `flowRef` is looked up in `FlowRunRequest.registry()` first, falling back to a real published lookup if it's not there (§9) |
 | `WaitNode` | suspend for an external signal | `id, event, timeout, onTimeoutOutcome` | §8's `waitCallback` |
 | `ParallelNode` | fan out | `id, branches` (list of node ids) | handled inline in the interpreter loop, not via `execute()` (§5) |
 | `JoinNode` | fan in, `"ALL"` policy only | `id, policy, from` (list of node ids) | ditto |
@@ -114,22 +114,6 @@ deserialized from JSON (§9) — `nodeType` is a separate discriminator from `Ta
 | `"PARALLEL"` | `ParallelNode` |
 | `"JOIN"` | `JoinNode` |
 | `"END"` | `EndNode` |
-
-**No shared mutable state.** `FlowWorkflowImpl.run()` keeps one `Map<String, NodeResult> results`, written once
-per node, keyed by that node's own id. A node's `in` map is small expressions resolved by `InputResolver`
-against already-completed ancestors or the flow's own input — never a forward or sideways read, and never a
-shared context two concurrent `PARALLEL` branches could collide on:
-
-| Path | Resolves to |
-|---|---|
-| `$.in.<field>` | the flow's own input map |
-| `$.<nodeId>.outputs.<field>` | one field of an already-completed node's outputs |
-| `$.<nodeId>.outputs` | that node's whole outputs map (e.g. passing a raw callback payload straight through, §7/§8) |
-| `$.<nodeId>.outcome` | that node's outcome label |
-| anything not starting with `$.` | a literal, passed through verbatim |
-
-This is deliberately not an expression language — CEL already lives inside an L1 recipe's own templates; this
-resolver only wires one node's output, or a plain constant, into another node's input.
 
 ## 4. Runtime walkthrough
 
@@ -218,6 +202,52 @@ executing: the top-level flow's major blocks (`dedupe`, `timble`, `timbleCallbac
 (`status-persist`) — proving 3 levels of recursion against real L1 recipes, real Mongo, and WireMock, not just
 toy fixtures.
 
+### 7a. Macros — `inline=true`, splicing instead of spawning
+
+A real child workflow is the right tool for an independently-durable, independently-parkable sub-process — but
+not every reusable step-pattern needs that. `dedupe` and `timble` (§11b) both start with the identical four-node
+prefix `core → existing → seed → ids` (fetch the customer, check Mongo for a prior record, build a stable id).
+Promoting that prefix to a real `SUBFLOW` would work, but buys a brand-new child workflow id and history for
+something that's really just "4 steps every case does first."
+
+A macro is authored exactly like a real subflow — same `FlowDef` shape, same `nodes`/`edges`/`EndNode`-per-exit —
+the ONE difference is `inline: true` on the call site:
+
+```json
+{ "nodeType": "SUBFLOW", "id": "fetchCoreAndStableId", "flowRef": "axis-precheck-decomposed-coreAndStableId",
+  "inline": true, "in": { "loanRequestId": "$.in.loanRequestId", "runNo": "$.in.runNo" },
+  "onError": { "retries": 1, "then": "PARK" } }
+```
+
+`runSubflow` branches on this flag:
+
+```java
+if (subflow.inline()) {
+    // Same workflow execution, no child workflow, no new workflow id -- a plain recursive call into the
+    // SAME interpreter loop (runFlowBody, extracted from run() so both paths share it), scoped by a key prefix.
+    return runFlowBody(childFlow, childReq, keyPrefix + subflow.id() + ".");
+}
+// else: the real child-workflow path, unchanged (ChildWorkflowOptions, ABANDON, etc.)
+```
+
+Two consequences, both deliberate:
+
+- **The macro's internal nodes are visible in the CALLER's own `query()`**, prefixed by the call site id
+  (`"fetchCoreAndStableId.core": "DONE"`) — not hidden inside a separate child workflow's own state the way a
+  real `SUBFLOW`'s internals would be. `nodeStatus`/`pendingResume` are instance-level maps shared across every
+  macro invocation in one workflow execution, so every key gets this prefix to stay collision-free (a sibling
+  macro, or the same macro inlined twice, can never clash) — `results` itself needs no such prefixing: each
+  `runFlowBody` call gets its own fresh local map, same as a real child would.
+- **A parked node inside a macro is resumed on the SAME workflow id** — `resume("fetchCoreAndStableId.core",
+  RETRY)` sent straight to the parent (or whichever ancestor is the nearest real workflow), no second workflow id
+  to find at all. `FlowParkDemoRunner`/`FlowResumeDemoRunner` (§13) demonstrate exactly this against the real
+  local Temporal server, against the real `axis-precheck-decomposed-coreAndStableId` macro.
+
+`MacroInlineTest` proves both halves against toy flows. `axis-precheck-decomposed-dedupe.json` and
+`-timble.json` (§11b) are the real proof: both now start with one `SubflowNode{inline:true}` referencing
+`axis-precheck-decomposed-coreAndStableId.json` instead of four duplicated nodes each — 8 duplicated nodes
+removed project-wide, replaced by one shared definition and two call sites.
+
 ## 8. The bridge to real L1: `OperationKind.RECIPE`
 
 A `TaskNode` is either a flow-native generic operation (`HTTP`/`SOAP`/`SFTP`/`MONGO`/`MAP`/`GEN`, executed via
@@ -244,15 +274,16 @@ engine stays ignorant of what it means. Every Axis precheck recipe used today is
 config**: `axis.precheck.{dedupe,timble,timbleCallback,status}`, `precheck.notify.{verified,failed}`.
 
 Version resolution (§9) follows the same split: `resolveVersions` collects `RECIPE` refs separately from
-everything else, and resolves them through L1's own real `RegistryActivity.resolveRecipes` (same task queue),
-not the engine's placeholder.
+everything else, and resolves them through L1's own real `RegistryActivity.resolveRecipes` (same task queue) —
+both halves are real now (§9), reusing the same underlying registry, just two different activities and two
+different `DocType`s (`RECIPE` vs. `FLOW`).
 
-## 9. Version pinning and the cycle/depth guard
+## 9. Version pinning — real now, and the cycle/depth guard
 
 ```java
 private Map<String, Integer> resolveVersions(FlowDef flow) {
     // recipeRefs -> com.rupeek.l1.api.RegistryActivity.resolveRecipes(...)   (real L1, lih-l1 queue)
-    // otherRefs  -> com.rupeek.flow.registry.ResolveFlowActivity.resolveVersions(...)  (engine placeholder)
+    // otherRefs  -> com.rupeek.flow.registry.ResolveFlowActivity.resolveVersions(...)  (real now, see below)
 }
 ```
 
@@ -260,7 +291,54 @@ Called once, near the top of **every** flow's own `run()` — not once for the w
 resolves the refs its *own* node list references directly, never transitively. This is deliberately recursive
 and lazy: a `SUBFLOW` invoked after a long `WAIT` legitimately resolves its own refs at *its* start, which may
 differ from what its parent resolved at the case's start — proven directly by
-`VersionPinningAndCycleGuardTest.eachLevelResolvesItsOwnVersionsIndependentlyAtItsOwnStart`.
+`VersionPinningAndCycleGuardTest.eachLevelResolvesItsOwnVersionsIndependentlyAtItsOwnStart`. Note that
+`resolveVersions` collects **every** `SubflowNode.flowRef()` into `otherRefs`, unconditionally — whether or not
+that ref also has a fixed answer in the flat test-fixture registry (below). That's deliberate (the test above
+depends on it: it proves two *separate* resolution calls happen, one per level, regardless of what's fixture vs.
+real) — it just means every ref ever referenced by a `SubflowNode` needs a published version somewhere, even one
+whose body will keep coming from a flat fixture map forever (§13's demo publishes all seven Axis flow refs for
+exactly this reason, not just the one being versioned).
+
+**What changed:** every demo/test before this used a placeholder — `refs -> refs.stream().collect(toMap(r->r,
+r->1))`, always answering "1" — and `runSubflow` never read `pinnedVersions` for a `SubflowNode` at all; it just
+did `req.registry().get(subflow.flowRef())`, a flat, version-less lookup. So a pinned version number was computed
+and then went nowhere. Two things closed that gap:
+
+- **A real registry**, reusing L1's own generic (not recipe-specific) plumbing: `DocType` gained a third value,
+  `FLOW`, alongside `RECIPE`/`OPERATION` — same `ConfigStore`/`MongoConfigStore` (one more collection,
+  `l1_flow`, in the same `lih_config` database), same immutable-version/latest-pointer mechanics. New,
+  flow-side classes mirror the recipe-side ones 1:1: `FlowSource`/`StoreFlowSource` (↔ `RecipeSource`/
+  `StoreRecipeSource`, minus the CEL-compile step — a flow is just JSON, nothing to compile), `FlowRegistryService`
+  (↔ `RegistryService`), `ResolveFlowActivityImpl` (↔ `RegistryActivityImpl`) — the real implementation of the
+  SAME `ResolveFlowActivity` interface every test already called. `FlowPublisher` publishes one version
+  (`insert` + `movePointer`); it is deliberately **not** a mirror of L1's real `Publisher` — that class's job is
+  CEL-compiling every recipe/operation and running golden tests, and a `FlowDef` has no CEL to compile, so
+  "publish" here is just the version-immutability `ConfigStore.insert` already enforces (throws on a duplicate
+  `ref@version`), nothing more.
+- **`runSubflow` actually consults the pinned version now.** The flat registry stays the primary, fast path
+  (every toy/fixture test still works completely unchanged — a ref it has an answer for never touches any
+  activity):
+
+  ```java
+  FlowDef childFlow = req.registry().get(subflow.flowRef());
+  if (childFlow == null) {
+      int pinned = pinnedVersions.getOrDefault(subflow.flowRef(), 1);
+      FetchFlowActivity fetch = Workflow.newActivityStub(FetchFlowActivity.class, ...);
+      childFlow = fetch.fetch(subflow.flowRef(), pinned);
+  }
+  ```
+
+  `FetchFlowActivity` is a new, separate activity (not a field on `FlowRunRequest`) **on purpose**: a live
+  `ConfigStore`/Mongo connection isn't deterministic, replayable workflow data, so it can never ride along inside
+  something Temporal serializes across a child-workflow boundary — it has to be an Activity call recorded in
+  *this* workflow's own history, exactly like every other registry call in this engine. `FetchFlowActivityImpl`
+  is the real implementation, backed by the same `StoreFlowSource`.
+
+`FlowVersioningTest` proves the whole mechanism fast (`InMemoryConfigStore`, no real Temporal server): publish
+v1 of a toy flow, run a caller that never has that flowRef in its own flat registry, get v1's result; publish v2
+(the **caller is never touched**); run again; get v2's result — plus publishing the same version twice is
+rejected (`IllegalStateException`, version immutability). §13 proves the identical mechanism against the real
+Axis precheck and the real local Temporal server.
 
 Cycle/depth is a pure, deterministic runtime check inside `runSubflow`, a backstop against a cycle a (not yet
 built) publish-time check might miss: `depth` increments per `SUBFLOW` start, capped at `MAX_DEPTH = 25`;
@@ -268,17 +346,20 @@ built) publish-time check might miss: `depth` increments per `SUBFLOW` start, ca
 fails fast (`ApplicationFailure`, type `ConfigError`) instead of recursing forever —
 `VersionPinningAndCycleGuardTest.aSelfReferencingSubflowFailsFastInsteadOfRecursingForever` proves it.
 
-## 10. `FlowDefLoader` — config, not just Java fixtures
+## 10. `FlowDefLoader` — a classpath file read, and the seam §9 plugs into
 
 ```java
 FlowDef flow = FlowDefLoader.loadFromClasspath("/flows/axis-precheck.json");
+FlowDef sameShape = FlowDefLoader.parse(jsonString);   // e.g. a StoredVersion's specJson, straight from the registry
 ```
 
-A plain Jackson read (`JavaTimeModule` registered, for `WaitNode.timeout()`), not a registry: no versioning, no
-publish-time validation, no pinning lifecycle — §9's `ResolveFlowActivity`/`RegistryActivity` split is the seam
-a real published/versioned flow store would eventually plug into. `AxisPrecheckFlowTest` loads the real Axis
-precheck flow this way, from `src/main/resources/flows/axis-precheck.json` — the config is what the test
-actually runs, not a separate document that could drift from it.
+A plain Jackson read (`JavaTimeModule` registered, for `WaitNode.timeout()`) — `loadFromClasspath` for a file on
+disk, `parse` for a JSON string already in hand (added once §9 needed to turn a `StoredVersion.specJson()` back
+into a `FlowDef`, same mapper, no second config). `AxisPrecheckFlowTest` loads the real Axis precheck flow this
+way, from `src/main/resources/flows/axis-precheck.json` — the config is what the test actually runs, not a
+separate document that could drift from it. This stays the primary path for everything in `src/main/resources/
+flows/` — nothing here was published into the real registry *except* for §13's versioning demo, which publishes
+copies of the same files specifically to exercise that path.
 
 ## 11. Axis precheck — the flow itself
 
@@ -376,16 +457,19 @@ the exact same outcomes/documents as §11's simple version.
 subflow's `EndNode.outputs()` into another sibling's input, wired explicitly by the parent (§3's note on why this
 needs an ancestor hop, not a direct sibling read).
 
-**`axis-precheck-decomposed-dedupe.json`** (12 `TASK` + 4 `END`): `core` (fetch customer) → `existing` (find any
-prior precheck doc) → `seed`/`ids` (build the stable `clientLoanId`) → `alreadyDone` (already a terminal
-dedupe record? → `alreadyInitiated`, forwarding `applicantId`/`clientLoanId`) → `inProgress` (a call already
-in flight? → `auditSkip` → `inProgressEnd`) → `call` (build request + call Axis dedupe, one recipe) →
-`isRerun` → `save`/`saveRerun` → `initiated` (forwards `applicantId`, `clientLoanId`, `customerId`).
+**`axis-precheck-decomposed-dedupe.json`** (1 `SUBFLOW` + 8 `TASK` + 4 `END`): `fetchCoreAndStableId` (§7a's
+macro — inlined, not spawned; fetch customer, find any prior precheck doc, build the stable `clientLoanId`, all
+in one call site) → `alreadyDone` (already a terminal dedupe record? → `alreadyInitiated`, forwarding
+`applicantId`/`clientLoanId`) → `inProgress` (a call already in flight? → `auditSkip` → `inProgressEnd`) →
+`call` (build request + call Axis dedupe, one recipe) → `isRerun` → `save`/`saveRerun` → `initiated` (forwards
+`applicantId`, `clientLoanId`, `customerId`).
 
-**`axis-precheck-decomposed-timble.json`** (8 `TASK` + 3 `END`): same `core`/`existing`/`seed`/`ids` shape,
-`alreadyDone` → `alreadyInitiated` (forwarding `timbleReferenceId`) or `call` (build + call Timble) → `save` →
-`audit` → `initiated` (forwarding `timbleReferenceId`). Takes `applicantId` as a flow input from its parent
-(the cross-sibling wiring above) since Timble's own audit record needs it.
+**`axis-precheck-decomposed-timble.json`** (1 `SUBFLOW` + 4 `TASK` + 3 `END`): same `fetchCoreAndStableId` macro
+call site, `alreadyDone` → `alreadyInitiated` (forwarding `timbleReferenceId`) or `call` (build + call Timble) →
+`save` → `audit` → `initiated` (forwarding `timbleReferenceId`). Takes `applicantId` as a flow input from its
+parent (the cross-sibling wiring above) since Timble's own audit record needs it. Both this file and dedupe's
+reference `axis-precheck-decomposed-coreAndStableId` — §7a's extracted macro, §13's versioning proof — instead
+of each carrying its own copy of the `core`/`existing`/`seed`/`ids` prefix the way they originally did.
 
 **`axis-precheck-decomposed-timbleCallback.json`** (5 `TASK` + 3 `END`): `decide` (parse the callback payload) →
 `latest` (re-fetch the precheck doc by customer) → `noPrecheck` (→ `noPrecheckEnd` if none found) → `save` →
@@ -442,3 +526,45 @@ wiring) and a real `mongo:7.0` Testcontainers instance — expect the first run 
 while pulling that image. `AxisPrecheckDecomposedFlowTest` additionally registers a trivial `ResolveFlowActivity`
 on the test worker (§9) — omitting it is a silent, zero-log hang, not a visible error, since the `SUBFLOW` nodes'
 version-resolution activity task just sits unclaimed forever.
+
+| File | Proves |
+|---|---|
+| `MacroInlineTest` | §7a's macro mechanism against toy flows: internal nodes visible in the caller's own `query()`, a parked internal node resumed on the caller's own workflow id |
+| `FlowVersioningTest` | §9's real version resolution, fast (`InMemoryConfigStore`): publish v1, run, publish v2 (caller untouched), run again, get v2 — plus immutable-version rejection |
+
+## 13. Live demos — which runner to use for what, and where v1/v2 actually live
+
+Everything above also runs against a REAL local Temporal server (`temporal server start-dev`, gRPC
+`localhost:7233`, Web UI `localhost:8233`), not only `TestWorkflowEnvironment` — these runners are plain `main()`
+classes under `src/test/java/com/rupeek/flow/dev/` (test-scoped, so they can reuse `L1Components`/WireMock/
+Testcontainers-Mongo exactly like the tests do), run with:
+
+```bash
+mvn -q test-compile
+mvn -q dependency:build-classpath -Dmdep.outputFile=/tmp/lih-cp.txt -Dmdep.includeScope=test
+java -cp target/classes:target/test-classes:$(cat /tmp/lih-cp.txt) com.rupeek.flow.dev.<RunnerClass> [args]
+```
+
+| Runner | What it demonstrates | Notes |
+|---|---|---|
+| `FlowDemoRunner <loanRequestId>` | §11b's whole Axis precheck, happy path, against the real server | one-shot: start, fire `timbleCallback`, print `RESULT` |
+| `FlowParkDemoRunner <loanRequestId>` | §6's PARK, for real — breaks the `core` step's lender endpoint so `dedupe`'s `fetchCoreAndStableId` macro (§7a) parks on `fetchCoreAndStableId.core`; prints the parked `nodeStatus` and the exact `resume` key to use next | run this first |
+| `FlowResumeDemoRunner <same loanRequestId>` | fixes the endpoint, sends `resume("fetchCoreAndStableId.core", RETRY)`, fires `timbleCallback`, waits for the result | run after the park runner, same id |
+| `FlowVersioningDemoRunner` (no args) | §9's real versioning, end to end, against the real server | publishes v1 of every Axis flow ref, runs a case (`LR-VERSION-DEMO-1`) → `APPROVED`; publishes v2 of **only** the macro; runs again (`LR-VERSION-DEMO-2`) with **`dedupe.json`/`timble.json` byte-for-byte unchanged** → `APPROVED`, and v2's new step has actually run (checked via a Mongo audit count) |
+
+**Where v1 and v2 actually are**, for `FlowVersioningDemoRunner`:
+
+- **v1** — `src/main/resources/flows/axis-precheck-decomposed-coreAndStableId.json` (§7a's macro, as extracted
+  from `dedupe`/`timble` — 4 `TASK` + 1 `END`: `core → existing → seed → ids → done`). This is the real,
+  committed file every other runner/test in this doc also loads via `FlowDefLoader.loadFromClasspath`.
+- **v2** — `src/test/resources/flows-v2/axis-precheck-decomposed-coreAndStableId-v2.json` (test-scoped on
+  purpose — it is not a second production file, it is the "someone published a new version" fixture): same
+  `flowRef`, `"version": 2`, one new step inserted before `done` — `versionTag`, an `axis.decomposed.auditInsert`
+  call tagging a harmless audit row `precheckStatus: "v2"` — proof the NEW step ran, with zero effect on the
+  macro's actual outputs (`EndNode.outputs` is identical to v1's), so `dedupe.json`/`timble.json`'s existing
+  wiring needs no change at all to keep working.
+
+Both get published into the SAME real registry (`MongoConfigStore`, database `lih_config`) by
+`FlowVersioningDemoRunner` itself, via `FlowPublisher` — nothing about v1 vs. v2 is hardcoded into the engine or
+into `dedupe.json`/`timble.json`; the only thing that changes between the two runs is which version is
+`latest` in the store.

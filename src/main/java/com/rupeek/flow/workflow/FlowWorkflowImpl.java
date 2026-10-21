@@ -15,6 +15,7 @@ import com.rupeek.flow.model.SubflowNode;
 import com.rupeek.flow.model.TaskNode;
 import com.rupeek.flow.model.OperationKind;
 import com.rupeek.flow.model.WaitNode;
+import com.rupeek.flow.registry.FetchFlowActivity;
 import com.rupeek.flow.registry.ResolveFlowActivity;
 import com.rupeek.l1.api.L1FailureType;
 import io.temporal.activity.ActivityOptions;
@@ -54,19 +55,30 @@ public class FlowWorkflowImpl implements FlowWorkflow {
     private final Map<String, String> nodeStatus = new HashMap<>();
     private final Map<String, ResumeAction> pendingResume = new HashMap<>();
     private final Map<String, Map<String, Object>> pendingEvents = new HashMap<>();
-    private Map<String, Integer> pinnedVersions = Map.of();
+    private final Map<String, Integer> pinnedVersions = new HashMap<>();
 
     @Override
     public NodeResult run(FlowRunRequest req) {
-        FlowDef flow = req.flow();
+        return runFlowBody(req.flow(), req, "");
+    }
+
+    /**
+     * The interpreter loop, reused for both this workflow's own root flow ({@code keyPrefix=""}) and for an
+     * inlined macro ({@code keyPrefix="<callSiteId>."}, chained for nested macros) — same workflow execution, no
+     * child workflow, so a macro's internal {@code results} stay local to this call (a fresh map per call, same
+     * as a real child gets) while {@code nodeStatus}/{@code pendingResume} are prefixed so a macro's internal
+     * node ids can never collide with the outer flow's or a sibling macro's, in the one shared instance-level
+     * map both scopes read/write for {@link #query} and {@link #resume}.
+     */
+    private NodeResult runFlowBody(FlowDef flow, FlowRunRequest req, String keyPrefix) {
         Map<String, Node> byId = new HashMap<>();
         flow.nodes().forEach(n -> byId.put(n.id(), n));
         Map<String, NodeResult> results = new HashMap<>();
 
         // Resolved once, here, at this flow's own start — not transitively for the whole tree up front. A
-        // nested subflow started later (e.g. after a long WAIT) resolves its own refs at its own start and may
-        // legitimately pin a newer version than this one did.
-        pinnedVersions = resolveVersions(flow);
+        // nested subflow (or macro) started later (e.g. after a long WAIT) resolves its own refs at its own
+        // start and may legitimately pin a newer version than its caller did.
+        pinnedVersions.putAll(resolveVersions(flow));
 
         String currentId = flow.start();
         while (true) {
@@ -84,9 +96,9 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                 for (String branchId : parallel.branches()) {
                     Node branchNode = byId.get(branchId);
                     Async.procedure(() -> {
-                        NodeResult branchResult = execute(branchNode, req, results);
+                        NodeResult branchResult = execute(branchNode, req, results, keyPrefix);
                         results.put(branchId, branchResult);
-                        nodeStatus.put(branchId, "DONE");
+                        nodeStatus.put(keyPrefix + branchId, "DONE");
                     });
                 }
                 currentId = nextUnconditional(flow, node.id());
@@ -97,9 +109,9 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                 currentId = nextUnconditional(flow, node.id());
                 continue;
             }
-            NodeResult result = execute(node, req, results);
+            NodeResult result = execute(node, req, results, keyPrefix);
             results.put(node.id(), result);
-            nodeStatus.put(node.id(), "DONE");
+            nodeStatus.put(keyPrefix + node.id(), "DONE");
             currentId = nextNodeId(flow, node.id(), result.outcome());
         }
     }
@@ -121,10 +133,10 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         return new FlowState(new HashMap<>(nodeStatus));
     }
 
-    private NodeResult execute(Node node, FlowRunRequest req, Map<String, NodeResult> results) {
+    private NodeResult execute(Node node, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
         return switch (node) {
-            case TaskNode task -> runTask(task, req, results);
-            case SubflowNode subflow -> runSubflow(subflow, req, results);
+            case TaskNode task -> runTask(task, req, results, keyPrefix);
+            case SubflowNode subflow -> runSubflow(subflow, req, results, keyPrefix);
             case WaitNode wait -> runWait(wait);
             case ParallelNode ignored -> throw new IllegalStateException("PARALLEL is handled in run(), not execute()");
             case JoinNode ignored -> throw new IllegalStateException("JOIN is handled in run(), not execute()");
@@ -132,11 +144,11 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         };
     }
 
-    private NodeResult runTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results) {
+    private NodeResult runTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
         if (task.kind() == OperationKind.RECIPE) {
-            return runRecipeTask(task, req, results);
+            return runRecipeTask(task, req, results, keyPrefix);
         }
-        return withPark(task.id(), () -> {
+        return withPark(keyPrefix + task.id(), () -> {
             Map<String, Object> inputs = InputResolver.resolve(task.in(), req.inputs(), results);
             TaskActivity activity = Workflow.newActivityStub(TaskActivity.class, activityOptions(task.onError()));
             int version = task.taskRef() != null ? pinnedVersions.getOrDefault(task.taskRef(), 1) : 1;
@@ -154,8 +166,8 @@ public class FlowWorkflowImpl implements FlowWorkflow {
      * on one worker. {@code runNo} travels as a plain input ({@code inputs.runNo}), same as every other input —
      * the engine itself stays ignorant of what it means.
      */
-    private NodeResult runRecipeTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results) {
-        return withPark(task.id(), () -> {
+    private NodeResult runRecipeTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
+        return withPark(keyPrefix + task.id(), () -> {
             Map<String, Object> inputs = InputResolver.resolve(task.in(), req.inputs(), results);
             com.rupeek.l1.api.TaskActivity l1 = Workflow.newActivityStub(com.rupeek.l1.api.TaskActivity.class,
                     ActivityOptions.newBuilder()
@@ -177,25 +189,53 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         });
     }
 
-    private NodeResult runSubflow(SubflowNode subflow, FlowRunRequest req, Map<String, NodeResult> results) {
-        return withPark(subflow.id(), () -> {
-            FlowDef childFlow = req.registry().get(subflow.flowRef());
-            if (childFlow == null) {
-                throw ApplicationFailure.newNonRetryableFailure("Unknown flow " + subflow.flowRef(), "ConfigError");
-            }
-            int childDepth = req.depth() + 1;
-            if (childDepth > MAX_DEPTH) {
-                throw ApplicationFailure.newNonRetryableFailure(
-                        "Subflow depth exceeded " + MAX_DEPTH + " at " + childFlow.flowRef(), "ConfigError");
-            }
-            if (req.flowRefChain().contains(childFlow.flowRef())) {
-                throw ApplicationFailure.newNonRetryableFailure(
-                        "Cycle detected: " + childFlow.flowRef() + " already in " + req.flowRefChain(), "ConfigError");
-            }
-            List<String> childChain = new ArrayList<>(req.flowRefChain());
-            childChain.add(childFlow.flowRef());
+    /**
+     * {@code inline=false} (default): a real Temporal child workflow, as always. {@code inline=true} ("macro"):
+     * the same {@code FlowDef} shape, but spliced into THIS workflow execution via a plain recursive call to
+     * {@link #runFlowBody} instead — no child workflow id, no separate history. A parked node inside an inline
+     * macro resumes via {@code "<keyPrefix><subflow.id()>.<internalNodeId>"} straight on this workflow's own id;
+     * there is nothing to traverse to, unlike a real child.
+     */
+    private NodeResult runSubflow(SubflowNode subflow, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
+        // The flat registry is the fixture path every toy/unit test still uses unchanged. A ref it doesn't have
+        // a fixed answer for falls back to a real FetchFlowActivity call, BY THE PINNED VERSION resolveVersions
+        // already computed for this flow — the one place that number previously went nowhere: nothing read it
+        // before this. An Activity, not inline data: a live store connection can't ride along as workflow state.
+        FlowDef childFlow = req.registry().get(subflow.flowRef());
+        if (childFlow == null) {
+            // subflow.version() is authoritative when present -- it was never put in pinnedVersions at all
+            // (resolveVersions skips a pinned ref entirely), so falling back to pinnedVersions here would just
+            // silently re-float a reference the author deliberately locked.
+            int version = subflow.version() != null
+                    ? subflow.version()
+                    : pinnedVersions.getOrDefault(subflow.flowRef(), 1);
+            FetchFlowActivity fetch = Workflow.newActivityStub(FetchFlowActivity.class,
+                    ActivityOptions.newBuilder().setStartToCloseTimeout(Duration.ofSeconds(30)).build());
+            childFlow = fetch.fetch(subflow.flowRef(), version);
+        }
+        if (childFlow == null) {
+            throw ApplicationFailure.newNonRetryableFailure("Unknown flow " + subflow.flowRef(), "ConfigError");
+        }
+        int childDepth = req.depth() + 1;
+        if (childDepth > MAX_DEPTH) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "Subflow depth exceeded " + MAX_DEPTH + " at " + childFlow.flowRef(), "ConfigError");
+        }
+        if (req.flowRefChain().contains(childFlow.flowRef())) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "Cycle detected: " + childFlow.flowRef() + " already in " + req.flowRefChain(), "ConfigError");
+        }
+        List<String> childChain = new ArrayList<>(req.flowRefChain());
+        childChain.add(childFlow.flowRef());
 
-            Map<String, Object> childInputs = InputResolver.resolve(subflow.in(), req.inputs(), results);
+        Map<String, Object> childInputs = InputResolver.resolve(subflow.in(), req.inputs(), results);
+        FlowRunRequest childReq = new FlowRunRequest(childFlow, childInputs, req.registry(), childDepth, childChain);
+
+        if (subflow.inline()) {
+            return runFlowBody(childFlow, childReq, keyPrefix + subflow.id() + ".");
+        }
+
+        return withPark(keyPrefix + subflow.id(), () -> {
             // ABANDON, not the default TERMINATE: a parked grandchild must survive this parent completing/retrying.
             // An explicit execution timeout, not an implicit default — a child that can itself park indefinitely
             // (withPark) must not be bounded by whatever a platform default happens to be.
@@ -205,7 +245,7 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                     .setWorkflowExecutionTimeout(Duration.ofDays(1))
                     .build();
             FlowWorkflow child = Workflow.newChildWorkflowStub(FlowWorkflow.class, options);
-            return child.run(new FlowRunRequest(childFlow, childInputs, req.registry(), childDepth, childChain));
+            return child.run(childReq);
         });
     }
 
@@ -220,10 +260,13 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                         ? Stream.of(t.taskRef()) : Stream.<String>empty())
                 .distinct()
                 .toList();
+        // A SubflowNode with its own pinned version() needs no resolution at all -- it already knows its number,
+        // forever, regardless of whatever the registry currently calls latest (§9's "v1 caller, v2 caller, side
+        // by side" case: only an UNPINNED ref ever asks "what's latest").
         List<String> otherRefs = flow.nodes().stream()
                 .flatMap(n -> switch (n) {
                     case TaskNode t when t.kind() != OperationKind.RECIPE && t.taskRef() != null -> Stream.of(t.taskRef());
-                    case SubflowNode s -> Stream.of(s.flowRef());
+                    case SubflowNode s when s.version() == null -> Stream.of(s.flowRef());
                     default -> Stream.<String>empty();
                 })
                 .distinct()

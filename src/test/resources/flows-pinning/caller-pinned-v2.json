@@ -1,0 +1,13 @@
+{
+  "flowRef": "caller-pinned-v2",
+  "version": 1,
+  "start": "sub",
+  "nodes": [
+    { "nodeType": "SUBFLOW", "id": "sub", "flowRef": "axis-precheck-decomposed-coreAndStableId",
+      "inline": true, "version": 2,
+      "in": { "loanRequestId": "$.in.loanRequestId", "runNo": "$.in.runNo" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "END", "id": "end", "status": "CALLER_DONE",
+      "outputs": { "customerId": "$.sub.outputs.customerId" } }
+  ],
+  "edges": [ { "from": "sub", "on": "OK", "to": "end" } ]
+}

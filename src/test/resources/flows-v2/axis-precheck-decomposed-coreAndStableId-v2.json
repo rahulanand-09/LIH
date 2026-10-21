@@ -1,0 +1,34 @@
+{
+  "flowRef": "axis-precheck-decomposed-coreAndStableId",
+  "version": 2,
+  "start": "core",
+  "nodes": [
+    { "nodeType": "TASK", "id": "core", "kind": "RECIPE", "taskRef": "axis.decomposed.fetchCore", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "existing", "kind": "RECIPE", "taskRef": "axis.decomposed.findPrecheck", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "seed", "kind": "RECIPE", "taskRef": "axis.decomposed.buildSeed", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "runNo": "$.in.runNo" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "ids", "kind": "RECIPE", "taskRef": "axis.decomposed.stableId", "fields": {},
+      "in": { "seed": "$.seed.outputs.value" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "versionTag", "kind": "RECIPE", "taskRef": "axis.decomposed.auditInsert", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "customerId": "$.core.outputs.customerId", "loanProcess": "macro-v2",
+        "status": "v2", "remarks": "coreAndStableId macro v2 executed" },
+      "onError": { "retries": 3, "then": "PARK" } },
+
+    { "nodeType": "END", "id": "done", "status": "OK", "outputs": {
+        "customer": "$.core.outputs.customer",
+        "customerId": "$.core.outputs.customerId",
+        "found": "$.existing.outputs.found",
+        "doc": "$.existing.outputs.doc",
+        "idsValue": "$.ids.outputs.value"
+      } }
+  ],
+  "edges": [
+    { "from": "core", "on": "OK", "to": "existing" },
+    { "from": "existing", "on": "OK", "to": "seed" },
+    { "from": "seed", "on": "OK", "to": "ids" },
+    { "from": "ids", "on": "OK", "to": "versionTag" },
+    { "from": "versionTag", "on": "OK", "to": "done" }
+  ]
+}

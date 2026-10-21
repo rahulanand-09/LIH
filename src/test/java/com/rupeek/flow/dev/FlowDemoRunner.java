@@ -98,7 +98,8 @@ public final class FlowDemoRunner {
                 "axis-precheck-decomposed-timbleCallback", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-timbleCallback.json"),
                 "axis-precheck-decomposed-status", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-status.json"),
                 "axis-precheck-decomposed-status-persist", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-status-persist.json"),
-                "axis-precheck-decomposed-notifyFail", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-notifyFail.json"));
+                "axis-precheck-decomposed-notifyFail", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-notifyFail.json"),
+                "axis-precheck-decomposed-coreAndStableId", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-coreAndStableId.json"));
         FlowDef top = FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed.json");
 
         String workflowId = "axis-precheck-decomposed-" + loanRequestId;

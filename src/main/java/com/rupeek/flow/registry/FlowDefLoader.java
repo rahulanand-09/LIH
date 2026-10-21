@@ -34,4 +34,13 @@ public final class FlowDefLoader {
             throw new UncheckedIOException("Failed to load flow from " + resourcePath, e);
         }
     }
+
+    /** Parses a {@link FlowDef} from a JSON string — e.g. a spec read back out of the registry (§9's real store). */
+    public static FlowDef parse(String json) {
+        try {
+            return MAPPER.readValue(json, FlowDef.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to parse flow JSON", e);
+        }
+    }
 }

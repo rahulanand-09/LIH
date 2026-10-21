@@ -34,6 +34,7 @@ public final class MongoConfigStore implements ConfigStore {
 
     private final MongoCollection<Document> recipes;
     private final MongoCollection<Document> operations;
+    private final MongoCollection<Document> flows;
     private final MongoCollection<Document> pointers;
     private final MongoCollection<Document> resources;
     private final MongoCollection<Document> resourceHistory;
@@ -43,6 +44,7 @@ public final class MongoConfigStore implements ConfigStore {
     public MongoConfigStore(MongoDatabase db) {
         this.recipes = db.getCollection("l1_recipe");
         this.operations = db.getCollection("l1_operation");
+        this.flows = db.getCollection("l1_flow");
         this.pointers = db.getCollection("l1_pointer");
         this.resources = db.getCollection("l1_resource");
         this.resourceHistory = db.getCollection("l1_resource_history");
@@ -55,13 +57,18 @@ public final class MongoConfigStore implements ConfigStore {
         IndexOptions unique = new IndexOptions().unique(true);
         recipes.createIndex(Indexes.ascending("ref", "version"), unique);
         operations.createIndex(Indexes.ascending("ref", "version"), unique);
+        flows.createIndex(Indexes.ascending("ref", "version"), unique);
         redirects.createIndex(Indexes.ascending("ref", "fromVersion", "at"));
         resourceHistory.createIndex(Indexes.ascending("resource", "changedAt"));
         return this;
     }
 
     private MongoCollection<Document> versions(DocType type) {
-        return type == DocType.RECIPE ? recipes : operations;
+        return switch (type) {
+            case RECIPE -> recipes;
+            case OPERATION -> operations;
+            case FLOW -> flows;
+        };
     }
 
     @Override

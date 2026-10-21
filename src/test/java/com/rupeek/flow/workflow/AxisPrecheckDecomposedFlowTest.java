@@ -115,7 +115,10 @@ class AxisPrecheckDecomposedFlowTest {
                 "axis-precheck-decomposed-timbleCallback", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-timbleCallback.json"),
                 "axis-precheck-decomposed-status", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-status.json"),
                 "axis-precheck-decomposed-status-persist", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-status-persist.json"),
-                "axis-precheck-decomposed-notifyFail", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-notifyFail.json"));
+                "axis-precheck-decomposed-notifyFail", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-notifyFail.json"),
+                // The macro dedupe/timble both inline (docs/flow-lld.md "macro" section) -- same registry map a real
+                // SUBFLOW ref is looked up in; "inline" on the node is what decides it's spliced in, not spawned.
+                "axis-precheck-decomposed-coreAndStableId", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-coreAndStableId.json"));
     }
 
     @AfterEach
