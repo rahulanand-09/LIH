@@ -1,0 +1,23 @@
+{
+  "taskRef": "core.fetchCustomerByLoanRequest",
+  "version": 1,
+  "kind": "HTTP",
+  "fields": {
+    "resource": "core",
+    "method": "GET",
+    "path": "=env.customerDataPath",
+    "query": {
+      "loanRequestIds": "=inputs.loanRequestId",
+      "loanIds": "",
+      "lpLoanIds": "",
+      "uLoanIds": "",
+      "uLpLoanIds": ""
+    },
+    "success": "resp.status == 200 && resp.body.?loandata.orValue([]).size() > 0",
+    "classify": "resp.status == 200 ? 'PERMANENT' : resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
+    "out": {
+      "customer": "resp.body.loandata[0].customer",
+      "customerId": "rk.str(resp.body.loandata[0].customer.id)"
+    }
+  }
+}

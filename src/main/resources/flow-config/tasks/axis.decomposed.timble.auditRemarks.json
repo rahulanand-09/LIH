@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.timble.auditRemarks",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "remarks": "='Axis precheck initiated. applicantId=' + rk.str(inputs.applicantId, 'null') + ', clientLoanId=' + rk.str(inputs.clientLoanId, 'null') + ', timbleReferenceId=' + rk.str(inputs.referenceId, 'null')"
+    }
+  }
+}

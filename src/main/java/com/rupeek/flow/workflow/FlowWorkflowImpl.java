@@ -1,6 +1,7 @@
 package com.rupeek.flow.workflow;
 
 import com.rupeek.flow.activity.TaskActivity;
+import com.rupeek.flow.activity.TaskFailureType;
 import com.rupeek.flow.activity.TaskRequest;
 import com.rupeek.flow.activity.TaskResult;
 import com.rupeek.flow.model.Edge;
@@ -13,11 +14,12 @@ import com.rupeek.flow.model.OnError;
 import com.rupeek.flow.model.ParallelNode;
 import com.rupeek.flow.model.SubflowNode;
 import com.rupeek.flow.model.TaskNode;
-import com.rupeek.flow.model.OperationKind;
 import com.rupeek.flow.model.WaitNode;
+import com.rupeek.flow.model.TaskDef;
 import com.rupeek.flow.registry.FetchFlowActivity;
+import com.rupeek.flow.registry.FetchTaskActivity;
 import com.rupeek.flow.registry.ResolveFlowActivity;
-import com.rupeek.l1.api.L1FailureType;
+import com.rupeek.flow.registry.ResolveTaskActivity;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.api.enums.v1.ParentClosePolicy;
 import io.temporal.common.RetryOptions;
@@ -144,48 +146,31 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         };
     }
 
+    /**
+     * A {@code taskRef}'d node never carries its own {@code fields} — they're fetched here, by ref+version,
+     * exactly how a {@code SubflowNode} fetches its {@code FlowDef} via {@link FetchFlowActivity}: an Activity
+     * call recorded in this workflow's own history, not inline data, so a node's real HTTP/MONGO/MAP/GEN config
+     * is never shipped as part of the flow graph itself — only fetched on demand, per node, when this node
+     * actually runs. A node with no {@code taskRef} (the escape hatch for a genuinely one-off config) still uses
+     * its own inline {@code fields} unchanged.
+     */
     private NodeResult runTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
-        if (task.kind() == OperationKind.RECIPE) {
-            return runRecipeTask(task, req, results, keyPrefix);
-        }
         return withPark(keyPrefix + task.id(), () -> {
             Map<String, Object> inputs = InputResolver.resolve(task.in(), req.inputs(), results);
-            TaskActivity activity = Workflow.newActivityStub(TaskActivity.class, activityOptions(task.onError()));
             int version = task.taskRef() != null ? pinnedVersions.getOrDefault(task.taskRef(), 1) : 1;
+            Map<String, Object> fields = task.fields();
+            if (task.taskRef() != null) {
+                FetchTaskActivity fetchTask = Workflow.newActivityStub(FetchTaskActivity.class,
+                        ActivityOptions.newBuilder().setStartToCloseTimeout(Duration.ofSeconds(30)).build());
+                TaskDef def = fetchTask.fetch(task.taskRef(), version);
+                fields = def.fields();
+            }
+            TaskActivity activity = Workflow.newActivityStub(TaskActivity.class, activityOptions(task.onError()));
             // runNo is a placeholder until a case/attempt concept exists above this engine; not this milestone's concern.
             TaskRequest request = new TaskRequest(task.kind(), task.taskRef(), version,
-                    Workflow.getInfo().getWorkflowId(), task.id(), 1, inputs);
+                    Workflow.getInfo().getWorkflowId(), task.id(), 1, inputs, fields);
             TaskResult result = activity.execute(request);
             return new NodeResult(result.outcome(), result.outputs());
-        });
-    }
-
-    /**
-     * Delegates the whole node to a published L1 recipe — {@code com.rupeek.l1.api.TaskActivity}, on its own
-     * task queue ({@code lih-l1}), so L2 and L1 can run as separate processes even though this test runs both
-     * on one worker. {@code runNo} travels as a plain input ({@code inputs.runNo}), same as every other input —
-     * the engine itself stays ignorant of what it means.
-     */
-    private NodeResult runRecipeTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
-        return withPark(keyPrefix + task.id(), () -> {
-            Map<String, Object> inputs = InputResolver.resolve(task.in(), req.inputs(), results);
-            com.rupeek.l1.api.TaskActivity l1 = Workflow.newActivityStub(com.rupeek.l1.api.TaskActivity.class,
-                    ActivityOptions.newBuilder()
-                            .setTaskQueue("lih-l1")
-                            .setStartToCloseTimeout(Duration.ofMinutes(5))
-                            .setRetryOptions(RetryOptions.newBuilder()
-                                    .setInitialInterval(Duration.ofSeconds(1))
-                                    .setBackoffCoefficient(2.0)
-                                    .setMaximumAttempts(task.onError() != null ? Math.max(1, task.onError().retries()) : 1)
-                                    .setDoNotRetry(L1FailureType.L1_BUSINESS.name(), L1FailureType.L1_UNKNOWN.name(),
-                                            L1FailureType.L1_PERMANENT.name())
-                                    .build())
-                            .build());
-            int version = pinnedVersions.getOrDefault(task.taskRef(), 1);
-            int runNo = inputs.get("runNo") instanceof Number n ? n.intValue() : 1;
-            com.rupeek.l1.api.TaskResult r = l1.runTask(new com.rupeek.l1.api.TaskRequest(
-                    task.taskRef(), version, Workflow.getInfo().getWorkflowId(), runNo, inputs));
-            return new NodeResult(r.outcome(), r.outputs());
         });
     }
 
@@ -251,38 +236,33 @@ public class FlowWorkflowImpl implements FlowWorkflow {
 
     /**
      * Collects this flow's own direct taskRef/flowRef and resolves them to pinned versions, once, at its start —
-     * recipe refs through L1's own real {@code RegistryActivity}, everything else through this engine's own
-     * placeholder (unused by any Axis-precheck-shaped flow today, kept for a future non-L1 operation kind).
+     * taskRefs through {@link ResolveTaskActivity}, flowRefs through {@link ResolveFlowActivity}: two different
+     * {@code DocType}s in the same registry, two different activities, exactly how RECIPE refs (L1's own
+     * registry) and FLOW refs were never resolved through the same call either, before L1 was deleted.
      */
     private Map<String, Integer> resolveVersions(FlowDef flow) {
-        List<String> recipeRefs = flow.nodes().stream()
-                .flatMap(n -> n instanceof TaskNode t && t.kind() == OperationKind.RECIPE
-                        ? Stream.of(t.taskRef()) : Stream.<String>empty())
+        List<String> taskRefs = flow.nodes().stream()
+                .flatMap(n -> n instanceof TaskNode t && t.taskRef() != null ? Stream.of(t.taskRef()) : Stream.<String>empty())
                 .distinct()
                 .toList();
         // A SubflowNode with its own pinned version() needs no resolution at all -- it already knows its number,
         // forever, regardless of whatever the registry currently calls latest (§9's "v1 caller, v2 caller, side
         // by side" case: only an UNPINNED ref ever asks "what's latest").
-        List<String> otherRefs = flow.nodes().stream()
-                .flatMap(n -> switch (n) {
-                    case TaskNode t when t.kind() != OperationKind.RECIPE && t.taskRef() != null -> Stream.of(t.taskRef());
-                    case SubflowNode s when s.version() == null -> Stream.of(s.flowRef());
-                    default -> Stream.<String>empty();
-                })
+        List<String> flowRefs = flow.nodes().stream()
+                .flatMap(n -> n instanceof SubflowNode s && s.version() == null ? Stream.of(s.flowRef()) : Stream.<String>empty())
                 .distinct()
                 .toList();
 
         Map<String, Integer> resolved = new HashMap<>();
-        if (!recipeRefs.isEmpty()) {
-            com.rupeek.l1.api.RegistryActivity registry = Workflow.newActivityStub(
-                    com.rupeek.l1.api.RegistryActivity.class, ActivityOptions.newBuilder()
-                            .setTaskQueue("lih-l1").setStartToCloseTimeout(Duration.ofSeconds(30)).build());
-            resolved.putAll(registry.resolveRecipes(recipeRefs));
+        if (!taskRefs.isEmpty()) {
+            ResolveTaskActivity registry = Workflow.newActivityStub(ResolveTaskActivity.class,
+                    ActivityOptions.newBuilder().setStartToCloseTimeout(Duration.ofSeconds(30)).build());
+            resolved.putAll(registry.resolveVersions(taskRefs));
         }
-        if (!otherRefs.isEmpty()) {
+        if (!flowRefs.isEmpty()) {
             ResolveFlowActivity registry = Workflow.newActivityStub(ResolveFlowActivity.class,
                     ActivityOptions.newBuilder().setStartToCloseTimeout(Duration.ofSeconds(30)).build());
-            resolved.putAll(registry.resolveVersions(otherRefs));
+            resolved.putAll(registry.resolveVersions(flowRefs));
         }
         return resolved;
     }
@@ -326,7 +306,11 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         int attempts = onError != null ? Math.max(1, onError.retries()) : 1;
         return ActivityOptions.newBuilder()
                 .setStartToCloseTimeout(Duration.ofSeconds(30))
-                .setRetryOptions(RetryOptions.newBuilder().setMaximumAttempts(attempts).build())
+                .setRetryOptions(RetryOptions.newBuilder()
+                        .setMaximumAttempts(attempts)
+                        .setDoNotRetry(TaskFailureType.UNKNOWN.name(), TaskFailureType.BUSINESS.name(),
+                                TaskFailureType.PERMANENT.name())
+                        .build())
                 .build();
     }
 

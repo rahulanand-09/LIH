@@ -8,8 +8,11 @@ import com.rupeek.flow.model.FlowDef;
 import com.rupeek.flow.model.OnError;
 import com.rupeek.flow.model.OperationKind;
 import com.rupeek.flow.model.SubflowNode;
+import com.rupeek.flow.model.TaskDef;
 import com.rupeek.flow.model.TaskNode;
+import com.rupeek.flow.registry.FetchTaskActivity;
 import com.rupeek.flow.registry.ResolveFlowActivity;
+import com.rupeek.flow.registry.ResolveTaskActivity;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowFailedException;
 import io.temporal.client.WorkflowOptions;
@@ -72,11 +75,17 @@ class VersionPinningAndCycleGuardTest {
         AtomicInteger leafTaskVersion = new AtomicInteger(-1);
         worker.registerActivitiesImplementations(
                 // Call N returns version N for whatever it was asked — proves two separate calls happen (one
-                // per level) and that a later level can legitimately see a different pinned version.
+                // per level, split across the flow- and task-ref activities since this flow has one of each) and
+                // that a later level can legitimately see a different pinned version.
                 (ResolveFlowActivity) refs -> {
                     int version = resolveCalls.incrementAndGet();
                     return refs.stream().collect(java.util.stream.Collectors.toMap(r -> r, r -> version));
                 },
+                (ResolveTaskActivity) refs -> {
+                    int version = resolveCalls.incrementAndGet();
+                    return refs.stream().collect(java.util.stream.Collectors.toMap(r -> r, r -> version));
+                },
+                (FetchTaskActivity) (ref, version) -> new TaskDef(ref, version, OperationKind.MAP, Map.of()),
                 (TaskActivity) request -> {
                     leafTaskVersion.set(request.taskVersion());
                     return new TaskResult("OK", Map.of());

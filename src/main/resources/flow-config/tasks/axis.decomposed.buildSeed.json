@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.buildSeed",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "value": "=inputs.loanRequestId + ':r' + string(inputs.runNo) + ':axis-dedupe'"
+    }
+  }
+}

@@ -14,7 +14,7 @@
       "in": { "event": "$.waitCallback.outputs" }, "onError": { "retries": 1, "then": "PARK" } },
     { "nodeType": "SUBFLOW", "id": "status", "flowRef": "axis-precheck-decomposed-status",
       "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 1, "then": "PARK" } },
-    { "nodeType": "TASK", "id": "notifyOk", "kind": "RECIPE", "taskRef": "precheck.notify.verified", "fields": {},
+    { "nodeType": "TASK", "id": "notifyOk", "kind": "HTTP", "taskRef": "rupeekweb.precheck.verification", "fields": {},
       "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 3, "then": "PARK" } },
     { "nodeType": "SUBFLOW", "id": "notifyFail", "flowRef": "axis-precheck-decomposed-notifyFail",
       "in": { "loanRequestId": "$.in.loanRequestId", "lender": "axis" }, "onError": { "retries": 1, "then": "PARK" } },
@@ -44,7 +44,7 @@
     { "from": "status", "on": "ALREADY_FINAL", "to": "approved" },
     { "from": "status", "on": "NO_PRECHECK", "to": "rejected" },
 
-    { "from": "notifyOk", "on": "NOTIFIED", "to": "approved" },
+    { "from": "notifyOk", "on": "OK", "to": "approved" },
     { "from": "notifyOk", "on": "NOT_ACCEPTED", "to": "approved" },
     { "from": "notifyFail", "on": "NOTIFIED", "to": "rejected" },
     { "from": "notifyFail", "on": "NOT_ACCEPTED", "to": "rejected" }

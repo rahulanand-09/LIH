@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.dedupe.isRerun",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=inputs.found ? 'RERUN' : 'FRESH'"
+    }
+  }
+}

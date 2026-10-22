@@ -1,0 +1,27 @@
+{
+  "taskRef": "axis.precheck.saveTimbleStatus",
+  "version": 1,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheck",
+    "action": "UPDATE_ONE",
+    "filter": {
+      "loanRequestId": ":loanRequestId",
+      "lenderSlug": "axis"
+    },
+    "set": {
+      "responseMap.timble": {
+        "status": ":status",
+        "statusMessage": ":message"
+      },
+      "last_updated": ":sys.now"
+    },
+    "inc": {
+      "version": 1
+    },
+    "out": {
+      "matched": "result.matched"
+    }
+  }
+}

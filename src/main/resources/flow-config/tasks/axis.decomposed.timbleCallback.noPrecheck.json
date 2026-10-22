@@ -1,0 +1,11 @@
+{
+  "taskRef": "axis.decomposed.timbleCallback.noPrecheck",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=!inputs.found ? 'NO_PRECHECK' : 'FOUND'",
+      "loanRequestId": "=inputs.doc.?loanRequestId.orValue(null)"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "taskRef": "axis.decomposed.status.alreadyFinal",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=rk.str(inputs.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null), '').upperAscii() in ['SUCCESS', 'FAILURE'] ? 'ALREADY_FINAL' : 'CONTINUE'",
+      "finalStatus": "=inputs.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null)"
+    }
+  }
+}

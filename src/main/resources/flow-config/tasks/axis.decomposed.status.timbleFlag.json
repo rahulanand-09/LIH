@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.status.timbleFlag",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "value": "=inputs.doc.?responseMap.?timble.orValue(null) != null ? (rk.str(inputs.doc.responseMap.timble.?status.orValue(null), 'FAILURE').upperAscii() == 'SUCCESS' ? 'Y' : 'N') : 'WIP'"
+    }
+  }
+}

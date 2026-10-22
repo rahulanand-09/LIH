@@ -1,0 +1,11 @@
+{
+  "taskRef": "axis.decomposed.timble.alreadyDone",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=inputs.found && rk.str(inputs.doc.?clientLoanId.orValue(''), '') == inputs.idsValue && rk.str(inputs.doc.?reference_id.orValue(null), '') != '' ? 'ALREADY_DONE' : 'NOT_DONE'",
+      "timbleReferenceId": "=inputs.doc.?reference_id.orValue(null)"
+    }
+  }
+}

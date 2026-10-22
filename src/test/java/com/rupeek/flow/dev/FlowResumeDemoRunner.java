@@ -3,19 +3,16 @@ package com.rupeek.flow.dev;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.mongodb.client.MongoDatabase;
+import com.rupeek.flow.activity.FlowMongoTestSupport;
+import com.rupeek.flow.activity.TaskActivityImpl;
+import com.rupeek.flow.activity.TestNativeExecutors;
+import com.rupeek.flow.audit.MongoAuditWriter;
 import com.rupeek.flow.model.NodeResult;
 import com.rupeek.flow.registry.ResolveFlowActivity;
 import com.rupeek.flow.workflow.FlowState;
 import com.rupeek.flow.workflow.FlowWorkflow;
 import com.rupeek.flow.workflow.FlowWorkflowImpl;
 import com.rupeek.flow.workflow.ResumeAction;
-import com.rupeek.l1.intercept.MongoAuditWriter;
-import com.rupeek.l1.ops.mongo.MongoTestSupport;
-import com.rupeek.l1.secrets.EnvSecretResolver;
-import com.rupeek.l1.worker.L1Components;
-import com.rupeek.l1.worker.RegistryActivityImpl;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.micrometer.observation.ObservationRegistry;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.client.WorkflowStub;
@@ -27,9 +24,6 @@ import io.temporal.worker.WorkerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
-import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -62,14 +56,12 @@ public final class FlowResumeDemoRunner {
         http.start();
         stubLender(http);
 
-        MongoDatabase db = MongoTestSupport.client().getDatabase("lendercore");
+        MongoDatabase db = FlowMongoTestSupport.client().getDatabase("lendercore");
         MongoAuditWriter auditWriter = new MongoAuditWriter(db, 100);
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
                 "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
-        L1Components l1 = L1Components.create(new L1Components.Settings("local", "classpath:l1-config", null,
-                Duration.ofSeconds(60), Map.of("lendercore", MongoTestSupport.client()), new EnvSecretResolver(env::get),
-                auditWriter, new SimpleMeterRegistry(), ObservationRegistry.NOOP, env::get, Clock.systemUTC()));
+        TaskActivityImpl taskActivity = TestNativeExecutors.build(env, FlowMongoTestSupport.client(), "lendercore", auditWriter);
 
         WorkflowServiceStubs stubs = WorkflowServiceStubs.newServiceStubs(
                 WorkflowServiceStubsOptions.newBuilder().setTarget("127.0.0.1:7233").build());
@@ -78,7 +70,7 @@ public final class FlowResumeDemoRunner {
         WorkerFactory factory = WorkerFactory.newInstance(client);
         Worker worker = factory.newWorker(QUEUE);
         worker.registerWorkflowImplementationTypes(FlowWorkflowImpl.class);
-        worker.registerActivitiesImplementations(l1.activity(), new RegistryActivityImpl(l1.registry()),
+        worker.registerActivitiesImplementations(taskActivity,
                 (ResolveFlowActivity) refs -> refs.stream().collect(Collectors.toMap(r -> r, r -> 1)));
         factory.start();
 
@@ -131,7 +123,7 @@ public final class FlowResumeDemoRunner {
     }
 
     private static String fixture(String name) throws IOException {
-        try (InputStream in = FlowResumeDemoRunner.class.getResourceAsStream("/l1-fixtures/axis/" + name)) {
+        try (InputStream in = FlowResumeDemoRunner.class.getResourceAsStream("/axis-fixtures/" + name)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }

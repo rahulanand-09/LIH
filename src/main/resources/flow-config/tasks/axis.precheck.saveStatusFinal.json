@@ -1,0 +1,32 @@
+{
+  "taskRef": "axis.precheck.saveStatusFinal",
+  "version": 1,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheck",
+    "action": "UPDATE_ONE",
+    "filter": {
+      "loanRequestId": ":loanRequestId",
+      "lenderSlug": "axis"
+    },
+    "set": {
+      "responseMap.pan": ":pan",
+      "responseMap.hunter": ":hunter",
+      "responseMap.dedupe": ":dedupe",
+      "responseMap.ramp": ":ramp",
+      "responseMap.axisPreCheckStatus": ":overall",
+      "last_updated": ":sys.now",
+      "approved": ":approved"
+    },
+    "inc": {
+      "version": 1
+    },
+    "expect": {
+      "matched": 1
+    },
+    "out": {
+      "matched": "result.matched"
+    }
+  }
+}

@@ -6,35 +6,42 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import com.rupeek.flow.model.FlowDef;
+import com.rupeek.flow.model.TaskDef;
 import com.rupeek.flow.registry.FetchFlowActivity;
 import com.rupeek.flow.registry.FetchFlowActivityImpl;
+import com.rupeek.flow.registry.FetchTaskActivity;
+import com.rupeek.flow.registry.FetchTaskActivityImpl;
 import com.rupeek.flow.registry.FlowDefLoader;
 import com.rupeek.flow.registry.FlowPublisher;
 import com.rupeek.flow.registry.FlowRegistryService;
 import com.rupeek.flow.registry.ResolveFlowActivity;
 import com.rupeek.flow.registry.ResolveFlowActivityImpl;
+import com.rupeek.flow.registry.ResolveTaskActivity;
+import com.rupeek.flow.registry.ResolveTaskActivityImpl;
 import com.rupeek.flow.registry.StoreFlowSource;
+import com.rupeek.flow.registry.StoreTaskSource;
+import com.rupeek.flow.registry.TaskDefLoader;
+import com.rupeek.flow.registry.TaskPublisher;
+import com.rupeek.flow.registry.TaskRegistryService;
 import com.rupeek.flow.workflow.FlowWorkflowImpl;
-import com.rupeek.l1.intercept.MongoAuditWriter;
-import com.rupeek.l1.registry.DocType;
-import com.rupeek.l1.registry.MongoConfigStore;
-import com.rupeek.l1.secrets.EnvSecretResolver;
-import com.rupeek.l1.worker.L1Components;
-import com.rupeek.l1.worker.RegistryActivityImpl;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.micrometer.observation.ObservationRegistry;
+import com.rupeek.flow.registry.store.DocType;
+import com.rupeek.flow.registry.store.MongoConfigStore;
+import com.rupeek.flow.activity.TaskActivityImpl;
+import com.rupeek.flow.activity.TestNativeExecutors;
+import com.rupeek.flow.audit.MongoAuditWriter;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -76,14 +83,17 @@ public final class FlowWorkerDaemon {
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
                 "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
-        L1Components l1 = L1Components.create(new L1Components.Settings("local", "classpath:l1-config", null,
-                Duration.ofSeconds(60), Map.of("lendercore", mongo), new EnvSecretResolver(env::get),
-                auditWriter, new SimpleMeterRegistry(), ObservationRegistry.NOOP, env::get, Clock.systemUTC()));
+        TestNativeExecutors.Executors executors = TestNativeExecutors.buildExecutors(env, mongo, "lendercore", auditWriter);
+        TaskActivityImpl taskActivity = new TaskActivityImpl(executors.http(), executors.mongo(), executors.map(), executors.gen());
 
-        MongoConfigStore store = new MongoConfigStore(mongo.getDatabase("lih_config")).ensureIndexes();
+        MongoConfigStore store = new MongoConfigStore(mongo.getDatabase("lih_flow_config")).ensureIndexes();
         StoreFlowSource flowSource = new StoreFlowSource(store);
-        FlowPublisher publisher = new FlowPublisher(store, Clock.systemUTC());
-        bootstrapRegistry(store, publisher);
+        StoreTaskSource taskSource = new StoreTaskSource(store);
+        FlowPublisher flowPublisher = new FlowPublisher(store, Clock.systemUTC());
+        TaskPublisher taskPublisher = new TaskPublisher(store, Clock.systemUTC(), executors.http(), executors.mongo(),
+                executors.map(), executors.gen());
+        bootstrapRegistry(store, flowPublisher);
+        bootstrapTaskRegistry(store, taskPublisher);
 
         WorkflowServiceStubs stubs = WorkflowServiceStubs.newServiceStubs(
                 WorkflowServiceStubsOptions.newBuilder().setTarget("127.0.0.1:7233").build());
@@ -92,17 +102,19 @@ public final class FlowWorkerDaemon {
         WorkerFactory factory = WorkerFactory.newInstance(client);
         Worker worker = factory.newWorker(QUEUE);
         worker.registerWorkflowImplementationTypes(FlowWorkflowImpl.class);
-        worker.registerActivitiesImplementations(l1.activity(), new RegistryActivityImpl(l1.registry()),
+        worker.registerActivitiesImplementations(taskActivity,
                 (ResolveFlowActivity) new ResolveFlowActivityImpl(new FlowRegistryService(flowSource)),
-                (FetchFlowActivity) new FetchFlowActivityImpl(flowSource));
+                (FetchFlowActivity) new FetchFlowActivityImpl(flowSource),
+                (ResolveTaskActivity) new ResolveTaskActivityImpl(new TaskRegistryService(taskSource)),
+                (FetchTaskActivity) new FetchTaskActivityImpl(taskSource));
         factory.start();
 
         System.out.println();
         System.out.println("FlowWorkerDaemon is up:");
         System.out.println("  Temporal   127.0.0.1:7233  (UI http://localhost:8233), task queue '" + QUEUE + "'");
-        System.out.println("  Mongo      mongodb://localhost:27018  (lendercore + lih_config, real docker container lih-mongo)");
+        System.out.println("  Mongo      mongodb://localhost:27018  (lendercore + lih_flow_config, real docker container lih-mongo)");
         System.out.println("  WireMock   " + http.baseUrl() + "  (stands in for Axis/core/rupeekweb)");
-        System.out.println("  Registry   " + store.pointers(DocType.FLOW));
+        System.out.println("  Registry   flows=" + store.pointers(DocType.FLOW) + "  tasks=" + store.pointers(DocType.TASK).size() + " refs");
         System.out.println();
         System.out.println("Trigger a case: FlowTriggerClient <loanRequestId>");
         System.out.println("Stop this process (Ctrl-C) to shut the worker down cleanly.");
@@ -143,6 +155,25 @@ public final class FlowWorkerDaemon {
         }
     }
 
+    /** Every {@code flow-config/tasks/*.json} file, published (and CEL-validated) the first time only. */
+    private static void bootstrapTaskRegistry(MongoConfigStore store, TaskPublisher publisher) throws IOException {
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        int published = 0;
+        for (Resource r : resolver.getResources("classpath:flow-config/tasks/*.json")) {
+            TaskDef task;
+            try (InputStream in = r.getInputStream()) {
+                task = TaskDefLoader.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            }
+            if (store.latest(DocType.TASK, task.taskRef()).isEmpty()) {
+                publisher.publish(task, "daemon", "bootstrap on first start");
+                published++;
+            }
+        }
+        if (published > 0) {
+            System.out.println("published " + published + " task(s) (first run)");
+        }
+    }
+
     private static void stubLender(WireMockServer http) throws IOException {
         http.stubFor(get(urlPathEqualTo("/api/support/fetchloandetailsv2")).willReturn(json(fixture("core-customer-response.json"))));
         http.stubFor(post(urlPathEqualTo(AXIS)).withQueryParam("type", equalTo("dedupe"))
@@ -164,7 +195,7 @@ public final class FlowWorkerDaemon {
     }
 
     private static String fixture(String name) throws IOException {
-        try (InputStream in = FlowWorkerDaemon.class.getResourceAsStream("/l1-fixtures/axis/" + name)) {
+        try (InputStream in = FlowWorkerDaemon.class.getResourceAsStream("/axis-fixtures/" + name)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }

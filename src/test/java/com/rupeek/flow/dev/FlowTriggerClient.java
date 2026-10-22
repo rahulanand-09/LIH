@@ -22,30 +22,26 @@ import java.util.concurrent.TimeUnit;
  */
 public final class FlowTriggerClient {
 
-    private static final String QUEUE = "lih-l1";
+    private static final String DEFAULT_QUEUE = "lih-l1";
 
     public static void main(String[] args) throws Exception {
         String loanRequestId = args.length > 0 ? args[0] : "LR-DAEMON-" + System.currentTimeMillis();
+        String queue = args.length > 1 ? args[1] : DEFAULT_QUEUE;
 
         WorkflowServiceStubs stubs = WorkflowServiceStubs.newServiceStubs(
                 WorkflowServiceStubsOptions.newBuilder().setTarget("127.0.0.1:7233").build());
         WorkflowClient client = WorkflowClient.newInstance(stubs,
                 WorkflowClientOptions.newBuilder().setNamespace("default").build());
 
-        // Only these six are needed in the flat fixture registry -- the macro resolves through the daemon's
-        // real registry instead (docs/flow-lld.md §9/§13), so it's deliberately not loaded/passed here either.
-        Map<String, com.rupeek.flow.model.FlowDef> registry = Map.of(
-                "axis-precheck-decomposed-dedupe", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-dedupe.json"),
-                "axis-precheck-decomposed-timble", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-timble.json"),
-                "axis-precheck-decomposed-timbleCallback", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-timbleCallback.json"),
-                "axis-precheck-decomposed-status", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-status.json"),
-                "axis-precheck-decomposed-status-persist", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-status-persist.json"),
-                "axis-precheck-decomposed-notifyFail", FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-notifyFail.json"));
+        // Empty on purpose: every SUBFLOW ref (and every TASK taskRef inside them) resolves through the
+        // daemon's real Mongo-backed registry (FetchFlowActivity/FetchTaskActivity), not an in-process shortcut
+        // -- so this run exercises the exact same resolve/fetch/validate path production would.
+        Map<String, com.rupeek.flow.model.FlowDef> registry = Map.of();
         var top = FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed.json");
 
         String workflowId = "axis-precheck-decomposed-" + loanRequestId;
         FlowWorkflow stub = client.newWorkflowStub(FlowWorkflow.class,
-                WorkflowOptions.newBuilder().setTaskQueue(QUEUE).setWorkflowId(workflowId)
+                WorkflowOptions.newBuilder().setTaskQueue(queue).setWorkflowId(workflowId)
                         .setWorkflowExecutionTimeout(Duration.ofHours(1)).build());
         Map<String, Object> inputs = Map.of("loanRequestId", loanRequestId, "runNo", 1, "loanProcess", "fresh");
         WorkflowClient.start(stub::run, FlowRunRequest.root(top, inputs, registry));

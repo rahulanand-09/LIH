@@ -16,14 +16,12 @@ import com.rupeek.flow.registry.StoreFlowSource;
 import com.rupeek.flow.workflow.FlowRunRequest;
 import com.rupeek.flow.workflow.FlowWorkflow;
 import com.rupeek.flow.workflow.FlowWorkflowImpl;
-import com.rupeek.l1.intercept.MongoAuditWriter;
-import com.rupeek.l1.ops.mongo.MongoTestSupport;
-import com.rupeek.l1.registry.MongoConfigStore;
-import com.rupeek.l1.secrets.EnvSecretResolver;
-import com.rupeek.l1.worker.L1Components;
-import com.rupeek.l1.worker.RegistryActivityImpl;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.micrometer.observation.ObservationRegistry;
+import com.rupeek.flow.registry.store.DocType;
+import com.rupeek.flow.registry.store.MongoConfigStore;
+import com.rupeek.flow.activity.FlowMongoTestSupport;
+import com.rupeek.flow.activity.TaskActivityImpl;
+import com.rupeek.flow.activity.TestNativeExecutors;
+import com.rupeek.flow.audit.MongoAuditWriter;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.client.WorkflowOptions;
@@ -72,7 +70,7 @@ public final class FlowVersioningDemoRunner {
         http.start();
         stubLender(http);
 
-        MongoDatabase lendercore = MongoTestSupport.client().getDatabase("lendercore");
+        MongoDatabase lendercore = FlowMongoTestSupport.client().getDatabase("lendercore");
         for (String c : List.of("LenderCustomerPrecheck", "LenderCustomerPrecheckAudit", MongoAuditWriter.COLLECTION)) {
             lendercore.getCollection(c).drop();
         }
@@ -80,13 +78,10 @@ public final class FlowVersioningDemoRunner {
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
                 "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
-        L1Components l1 = L1Components.create(new L1Components.Settings("local", "classpath:l1-config", null,
-                Duration.ofSeconds(60), Map.of("lendercore", MongoTestSupport.client()), new EnvSecretResolver(env::get),
-                auditWriter, new SimpleMeterRegistry(), ObservationRegistry.NOOP, env::get, Clock.systemUTC()));
+        TaskActivityImpl taskActivity = TestNativeExecutors.build(env, FlowMongoTestSupport.client(), "lendercore", auditWriter);
 
-        // The real registry: same ConfigStore shape a recipe's own version is published into (one more
-        // collection, DocType.FLOW, in the same lih_config database), not a second, parallel system.
-        MongoConfigStore store = new MongoConfigStore(MongoTestSupport.client().getDatabase("lih_config")).ensureIndexes();
+        // Flow's own registry: its own lih_flow_config database, not a collection shared with L1's lih_config.
+        MongoConfigStore store = new MongoConfigStore(FlowMongoTestSupport.client().getDatabase("lih_flow_config")).ensureIndexes();
         StoreFlowSource flowSource = new StoreFlowSource(store);
         FlowPublisher publisher = new FlowPublisher(store, Clock.systemUTC());
 
@@ -97,7 +92,7 @@ public final class FlowVersioningDemoRunner {
         WorkerFactory factory = WorkerFactory.newInstance(client);
         Worker worker = factory.newWorker(QUEUE);
         worker.registerWorkflowImplementationTypes(FlowWorkflowImpl.class);
-        worker.registerActivitiesImplementations(l1.activity(), new RegistryActivityImpl(l1.registry()),
+        worker.registerActivitiesImplementations(taskActivity,
                 (ResolveFlowActivity) new ResolveFlowActivityImpl(new FlowRegistryService(flowSource)),
                 (FetchFlowActivity) new FetchFlowActivityImpl(flowSource));
         factory.start();
@@ -128,7 +123,7 @@ public final class FlowVersioningDemoRunner {
         }
         FlowDef macroV1 = FlowDefLoader.loadFromClasspath("/flows/axis-precheck-decomposed-coreAndStableId.json");
         publisher.publish(macroV1, "demo", "initial publish");
-        System.out.println("published " + MACRO_REF + "@" + macroV1.version() + "; latest = " + store.latest(com.rupeek.l1.registry.DocType.FLOW, MACRO_REF));
+        System.out.println("published " + MACRO_REF + "@" + macroV1.version() + "; latest = " + store.latest(DocType.FLOW, MACRO_REF));
 
         run(client, registry, top, "LR-VERSION-DEMO-1");
         long v2TagsBeforePublish = countVersionTags(lendercore);
@@ -138,7 +133,7 @@ public final class FlowVersioningDemoRunner {
         System.out.println("== Publishing v2 (adds one audit-tagging step; dedupe.json/timble.json untouched) ==");
         FlowDef macroV2 = FlowDefLoader.loadFromClasspath("/flows-v2/axis-precheck-decomposed-coreAndStableId-v2.json");
         publisher.publish(macroV2, "demo", "bump to v2 -- adds version-tag audit step");
-        System.out.println("published " + MACRO_REF + "@" + macroV2.version() + "; latest = " + store.latest(com.rupeek.l1.registry.DocType.FLOW, MACRO_REF));
+        System.out.println("published " + MACRO_REF + "@" + macroV2.version() + "; latest = " + store.latest(DocType.FLOW, MACRO_REF));
 
         run(client, registry, top, "LR-VERSION-DEMO-2");
         long v2TagsAfterPublish = countVersionTags(lendercore);
@@ -195,7 +190,7 @@ public final class FlowVersioningDemoRunner {
     }
 
     private static String fixture(String name) throws IOException {
-        try (InputStream in = FlowVersioningDemoRunner.class.getResourceAsStream("/l1-fixtures/axis/" + name)) {
+        try (InputStream in = FlowVersioningDemoRunner.class.getResourceAsStream("/axis-fixtures/" + name)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }

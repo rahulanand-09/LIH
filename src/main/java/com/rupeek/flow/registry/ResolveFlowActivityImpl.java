@@ -1,6 +1,6 @@
 package com.rupeek.flow.registry;
 
-import com.rupeek.l1.model.ConfigJson.ConfigException;
+import com.rupeek.flow.registry.store.FlowConfigException;
 import io.temporal.failure.ApplicationFailure;
 
 import java.util.List;
@@ -24,7 +24,7 @@ public final class ResolveFlowActivityImpl implements ResolveFlowActivity {
     public Map<String, Integer> resolveVersions(List<String> refs) {
         try {
             return registry.resolve(refs);
-        } catch (ConfigException e) {
+        } catch (FlowConfigException e) {
             throw ApplicationFailure.newNonRetryableFailure(e.getMessage(), "ConfigError");
         }
     }

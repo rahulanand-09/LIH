@@ -16,6 +16,8 @@ import java.util.Map;
  * @param nodeId      the graph node that triggered this call
  * @param runNo       run number; increments only on revert
  * @param inputs      this one operation's inputs, resolved from upstream node outputs or the flow's own input
+ * @param fields      the node's own inline operation config ({@link com.rupeek.flow.model.TaskNode#fields()}) —
+ *                    HTTP request shape, MONGO filter/set, MAP template, GEN action, same map verbatim
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record TaskRequest(
@@ -25,5 +27,6 @@ public record TaskRequest(
         String caseId,
         String nodeId,
         int runNo,
-        Map<String, Object> inputs) {
+        Map<String, Object> inputs,
+        Map<String, Object> fields) {
 }

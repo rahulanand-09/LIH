@@ -5,14 +5,14 @@ import com.mongodb.client.MongoClients;
 import com.rupeek.flow.model.FlowDef;
 import com.rupeek.flow.registry.FlowDefLoader;
 import com.rupeek.flow.registry.FlowPublisher;
-import com.rupeek.l1.registry.DocType;
-import com.rupeek.l1.registry.MongoConfigStore;
+import com.rupeek.flow.registry.store.DocType;
+import com.rupeek.flow.registry.store.MongoConfigStore;
 
 import java.time.Clock;
 
 /**
  * Publishes one flow version into the SAME real, persistent registry {@link FlowWorkerDaemon} reads from
- * ({@code mongodb://localhost:27018/lih_config}) — no need to stop/restart the daemon: {@code ResolveFlowActivity}
+ * ({@code mongodb://localhost:27018/lih_flow_config}) — no need to stop/restart the daemon: {@code ResolveFlowActivity}
  * reads {@code latest} live, on every call (docs/flow-lld.md §9).
  *
  * <p>Usage: {@code FlowPublishClient /flows-v2/axis-precheck-decomposed-coreAndStableId-v2.json ops "bump to v2"}
@@ -29,7 +29,7 @@ public final class FlowPublishClient {
         String reason = args.length > 2 ? args[2] : "manual publish";
 
         MongoClient mongo = MongoClients.create("mongodb://localhost:27018");
-        MongoConfigStore store = new MongoConfigStore(mongo.getDatabase("lih_config")).ensureIndexes();
+        MongoConfigStore store = new MongoConfigStore(mongo.getDatabase("lih_flow_config")).ensureIndexes();
         FlowPublisher publisher = new FlowPublisher(store, Clock.systemUTC());
 
         FlowDef flow = FlowDefLoader.loadFromClasspath(resourcePath);

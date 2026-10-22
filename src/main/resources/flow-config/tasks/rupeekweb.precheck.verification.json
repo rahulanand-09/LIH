@@ -1,0 +1,22 @@
+{
+  "taskRef": "rupeekweb.precheck.verification",
+  "version": 1,
+  "kind": "HTTP",
+  "fields": {
+    "resource": "rupeekweb",
+    "method": "POST",
+    "path": "=env.precheckVerificationPath",
+    "bodyEncoding": "FORM",
+    "body": {
+      "loanrequestId": "=inputs.loanRequestId",
+      "approved": "true"
+    },
+    "idempotent": true,
+    "success": "resp.status >= 200 && resp.status < 300",
+    "classify": "resp.status == 429 || resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
+    "onError": {
+      "BUSINESS": "NOT_ACCEPTED"
+    },
+    "out": {}
+  }
+}

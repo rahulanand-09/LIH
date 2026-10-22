@@ -5,3 +5,17 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27018/lendercore
+    redis:
+      host: localhost
+      port: 6379
+
+flow:
+  enabled: true
+  registry:
+    mode: mongo
+    cache:
+      enabled: true
+      version-ttl: 1h
+      pointer-ttl: 10s
+  temporal:
+    task-queue: lih-l2

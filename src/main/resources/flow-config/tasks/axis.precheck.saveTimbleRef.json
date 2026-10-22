@@ -1,0 +1,32 @@
+{
+  "taskRef": "axis.precheck.saveTimbleRef",
+  "version": 1,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheck",
+    "action": "UPSERT",
+    "filter": {
+      "loanRequestId": ":loanRequestId",
+      "lenderSlug": "axis"
+    },
+    "setOnInsert": {
+      "customerId": ":customerId",
+      "responseMap": {},
+      "approved": false,
+      "creation_date": ":sys.now",
+      "createdAt": ":sys.now",
+      "_class": "com.rupeek.lender.entity.PrecheckEntity"
+    },
+    "set": {
+      "reference_id": ":referenceId",
+      "last_updated": ":sys.now"
+    },
+    "inc": {
+      "version": 1
+    },
+    "out": {
+      "matched": "result.matched"
+    }
+  }
+}

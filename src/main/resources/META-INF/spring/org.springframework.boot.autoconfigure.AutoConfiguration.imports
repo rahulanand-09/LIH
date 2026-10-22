@@ -1,1 +1,2 @@
-com.rupeek.l1.worker.L1AutoConfiguration
+com.rupeek.flow.worker.FlowAutoConfiguration
+com.rupeek.flow.worker.FlowRegistryAutoConfiguration

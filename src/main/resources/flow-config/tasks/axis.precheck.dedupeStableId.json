@@ -1,0 +1,12 @@
+{
+  "taskRef": "axis.precheck.dedupeStableId",
+  "version": 1,
+  "kind": "GEN",
+  "fields": {
+    "action": "STABLE_ID",
+    "params": {
+      "reuse": "",
+      "seed": "=inputs.loanRequestId + ':r' + string(inputs.runNo) + ':axis-dedupe'"
+    }
+  }
+}

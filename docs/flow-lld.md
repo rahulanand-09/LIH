@@ -25,15 +25,21 @@ only SUBFLOW composition happens in workflow code.
 | Package | What's in it |
 |---|---|
 | `com.rupeek.flow.model` | The node/edge schema — plain data, no Temporal imports. `FlowDef`, the sealed `Node` interface and its six records, `Edge`, `OnError`, `NodeResult`, `OperationKind`. |
-| `com.rupeek.flow.activity` | The engine's own generic leaf-TASK contract (`TaskActivity`/`TaskRequest`/`TaskResult`/`TaskFailureType`) — used by non-`RECIPE` node kinds. Nothing in the Axis precheck flow uses this today (see §7); kept for a future non-L1 operation kind. |
+| `com.rupeek.flow.activity` | The engine's own generic leaf-TASK contract (`TaskActivity`/`TaskRequest`/`TaskResult`/`TaskFailureType`), now with real implementations (§15): `TaskActivityImpl` (the dispatcher), `ErrorClassifier`, `FlowTaskFailure`, `AuditFields`. |
+| `com.rupeek.flow.activity.{http,mongo,map,gen}` | The four native executors (§15): `HttpTaskExecutor`, `MongoTaskExecutor`, `MapTaskExecutor`, `GenTaskExecutor`, plus their own small support classes (`HttpClientFactory`, `MongoQueryBinder`, `BsonPlain`, `MongoDatabaseProvider`). |
+| `com.rupeek.flow.expr` (+ `.fn`) | The CEL expression/template engine (§15) — `CelExpressionEngine`, `TemplateEvaluator`, `RkFunctions`, `ExprLimits`, `ScopeDecl`. |
+| `com.rupeek.flow.resource` | HTTP/MONGO resource config, auth and secrets (§15) — `Resource`, `ResourceProvider`/`ClasspathResourceProvider`, `AuthProvider`/`AuthProviders`, `SecretResolver`/`EnvSecretResolver`. |
+| `com.rupeek.flow.audit` | `LenderApiAuditLog` writing and PII masking (§15) — `TaskAuditor`, `TaskCall`, `AuditRecord`, `MongoAuditWriter`, `PiiMasker`. |
 | `com.rupeek.flow.workflow` | The interpreter itself: `FlowWorkflow` (the one `@WorkflowInterface`, reused at every depth), `FlowWorkflowImpl`, `FlowRunRequest`, `InputResolver`, `ResumeAction`, `FlowState`. |
 | `com.rupeek.flow.registry` | Version pinning, real now (§9): `ResolveFlowActivity`/`ResolveFlowActivityImpl`, `FetchFlowActivity`/`FetchFlowActivityImpl`, `FlowSource`/`StoreFlowSource`, `FlowRegistryService`, `FlowPublisher`, and `FlowDefLoader` (loads/parses a `FlowDef` from JSON). |
-| `com.rupeek.l1.*` | Mostly untouched — the real recipe/operation engine: CEL, HTTP/MONGO/MAP/GEN executors, registry, publish pipeline, golden tests. `com.rupeek.flow` depends on `com.rupeek.l1.api.TaskActivity`/`RegistryActivity` (§8) and, since §9's real versioning, on the generic (non-recipe-specific) registry plumbing too: `ConfigStore`, `DocType` (now has a third value, `FLOW`), `StoredVersion`, `ConfigCodec`, `MongoConfigStore`/`InMemoryConfigStore` — the SAME store a recipe's own version lives in, one more collection, not a parallel system. |
+| `com.rupeek.flow.registry.store` | Flow's own registry storage (§9's 2026-10-22 update) — `ConfigStore`, `DocType` (one value, `FLOW`), `StoredVersion`, `FlowConfigCodec`, `FlowConfigException`, `MongoConfigStore`/`InMemoryConfigStore`/`RedisConfigStore`. |
 
 Deleted entirely as dead code superseded by this package: `com.rupeek.lender.*` (old DTOs/entities) and
-`com.rupeek.lih.*` including the old linear-step-list `com.rupeek.lih.l2.*` stub. Nothing in `com.rupeek.l1`
-referenced either package (only a few Mongo `_class` string literals mention `com.rupeek.lender.entity.*` by
-name, as plain data — not a compile-time dependency), so the deletion was a pure subtraction.
+`com.rupeek.lih.*` including the old linear-step-list `com.rupeek.lih.l2.*` stub (only a few Mongo `_class`
+string literals mention `com.rupeek.lender.entity.*` by name, as plain data — not a compile-time dependency).
+**`com.rupeek.l1` itself — the entire legacy recipe/operation engine this doc's earlier sections (§8 especially)
+describe bridging to — was deleted 2026-10-22 once §15's native executors made the bridge unnecessary**: 108
+main + 37 test files, `l1-config/`, `l1-schemas/`, `l1-fixtures/`. See §15 for what replaced it and where.
 
 ## 3. Class design — the node/edge schema
 
@@ -248,7 +254,13 @@ Two consequences, both deliberate:
 `axis-precheck-decomposed-coreAndStableId.json` instead of four duplicated nodes each — 8 duplicated nodes
 removed project-wide, replaced by one shared definition and two call sites.
 
-## 8. The bridge to real L1: `OperationKind.RECIPE`
+## 8. The bridge to real L1: `OperationKind.RECIPE` (historical — removed 2026-10-22, see §15)
+
+**This whole section describes a bridge that no longer exists.** `OperationKind.RECIPE` and `FlowWorkflowImpl`'s
+`runRecipeTask` were deleted once §15's native `HTTP`/`MONGO`/`MAP`/`GEN` executors could run every real flow
+node, and `com.rupeek.l1` — the whole package this section bridges to — was deleted with it (108 main + 37 test
+files, `l1-config/`, `l1-schemas/`). Kept below for the historical "why a bridge existed at all" reasoning, same
+as §9's own 2026-10-21 history is kept — nothing in this section is current architecture.
 
 A `TaskNode` is either a flow-native generic operation (`HTTP`/`SOAP`/`SFTP`/`MONGO`/`MAP`/`GEN`, executed via
 the engine's own `com.rupeek.flow.activity.TaskActivity`) or `RECIPE` — delegate the whole node to a published
@@ -345,6 +357,28 @@ built) publish-time check might miss: `depth` increments per `SUBFLOW` start, ca
 `flowRefChain` carries every flowRef in the lineage from the root, and a child's own `flowRef` reappearing in it
 fails fast (`ApplicationFailure`, type `ConfigError`) instead of recursing forever —
 `VersionPinningAndCycleGuardTest.aSelfReferencingSubflowFailsFastInsteadOfRecursingForever` proves it.
+
+**Update, 2026-10-22 — the registry sharing above is resolved, not current.** §9's "reusing L1's own generic
+plumbing... same `ConfigStore`/`MongoConfigStore`... in the same `lih_config` database" (and §13's "published into
+the SAME real registry... database `lih_config`") described a deliberate but temporary bridge. `com.rupeek.flow`
+must not import `com.rupeek.l1` at all except the one documented exception below — this registry sharing was the
+first thing to go: `flow` now has its own `com.rupeek.flow.registry.store.{ConfigStore,DocType,StoredVersion,
+MongoConfigStore,InMemoryConfigStore,RedisConfigStore}` (a trimmed, flow-only copy — no `RECIPE`/`OPERATION`
+`DocType`, no resources/redirects/publish-log, nothing a flow publish never used), its own `lih_flow_config`
+Mongo database (`flow_version`/`flow_pointer` collections, not `l1_flow`), and its own
+`FlowAutoConfiguration.RegistryConnection` wired independently of `L1AutoConfiguration` (`flow.registry.mode=mongo`
+has no dependency on `l1.registry.mode`; see §14). `FlowConfigCodec`/`FlowConfigException` replace
+`l1.registry.ConfigCodec`/`l1.model.ConfigJson.ConfigException` for the same reason.
+
+**§8's `OperationKind.RECIPE` bridge is the one remaining, explicitly scoped exception** — `FlowWorkflowImpl`
+still calls `com.rupeek.l1.api.TaskActivity`/`RegistryActivity` on queue `lih-l1`, because `flow` has no native
+`HTTP`/`MONGO`/`MAP`/`GEN` executor yet (those `OperationKind` values are registered, not implemented — §2) and
+every existing Axis precheck recipe still runs on L1's real CEL/HTTP/Mongo engine. Removing it means building
+those native executors in `flow` and porting the ~29 `l1-config/recipes/axis-decomposed/*.json` recipes to native
+flow task config — tracked as a separate follow-up, not done opportunistically alongside this registry split, so
+the only proven end-to-end suite (`AxisPrecheckFlowTest`/`AxisPrecheckDecomposedFlowTest`) isn't broken without a
+working replacement in hand. Until that lands, this is the one intentional `com.rupeek.l1` import left in
+`com.rupeek.flow`, not a precedent for adding more.
 
 ## 10. `FlowDefLoader` — a classpath file read, and the seam §9 plugs into
 
@@ -568,3 +602,127 @@ Both get published into the SAME real registry (`MongoConfigStore`, database `li
 `FlowVersioningDemoRunner` itself, via `FlowPublisher` — nothing about v1 vs. v2 is hardcoded into the engine or
 into `dedupe.json`/`timble.json`; the only thing that changes between the two runs is which version is
 `latest` in the store.
+
+## 14. Running for real — main-code Mongo/Redis/Temporal wiring, not a test `main()`
+
+Everything in §13 is a one-shot `src/test` runner that opens its own Mongo/Temporal connections by hand. There is
+now a real, standing application instead: `com.rupeek.LihWorkerApplication` (`@SpringBootApplication`), started
+with `mvn spring-boot:run` or the built jar. It activates exactly ONE Spring Boot auto-configuration
+(`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`) — there was a second,
+`com.rupeek.l1.worker.L1AutoConfiguration`, until §15's migration deleted `com.rupeek.l1` entirely:
+
+- **`com.rupeek.flow.worker.FlowAutoConfiguration`** (`flow.enabled=true`) — the flow engine: `StoreFlowSource`/
+  `FlowRegistryService`/`ResolveFlowActivityImpl`/`FetchFlowActivityImpl` over flow's own
+  `FlowAutoConfiguration.RegistryConnection`/`ConfigStore` (`com.rupeek.flow.registry.store`, §9's 2026-10-22
+  update) — its own Mongo database (`flow.registry.database`, default `lih_flow_config`) — plus a `FlowPublisher`
+  bean, the full native-executor stack (§15 — `ExpressionEngine`/`TemplateEvaluator`, `ResourceProvider`,
+  `TaskAuditor`, the four `*TaskExecutor`s, `TaskActivityImpl`), and `FlowTemporalWorker` polling
+  `flow.temporal.task-queue` (default `lih-l2`), registering `TaskActivityImpl` alongside the registry activities.
+
+Enabled in the checked-in `application.yml` for local dev, against this machine's already-running containers
+(`lih-mongo` on `27018`, a local `redis` on `6379`) and the local Temporal dev server (`localhost:7233`).
+`docker-compose.yml` at the repo root defines the same two images for a fresh machine.
+
+**Redis as a read-through cache in front of Mongo** — `flow.registry.cache.enabled` (on by default in
+`application.yml`): `com.rupeek.flow.registry.store.RedisConfigStore` decorates flow's own `ConfigStore`:
+
+- `find(type, ref, version)` — a published version is immutable, so a cache hit never goes stale; still
+  TTL-bounded (`flow.registry.cache.version-ttl`, default 1h) to cap memory, not for correctness.
+- `latest(type, ref)` — the "latest" pointer DOES change, so it's cached with a short TTL
+  (`flow.registry.cache.pointer-ttl`, default 10s) **and evicted immediately inside `movePointer`**, so a publish
+  is visible at once rather than after the TTL window.
+- Every write (`insert`) and every bulk/startup read (`pointers`) passes straight through.
+
+This is a distinct, opt-in layer from the registry's own in-process behavior — Redis is shared across however
+many worker instances are running, which is the gap it closes. It has no dedicated test yet — off by default in
+every test (`flow.registry.cache.enabled=false` unless set), only on in `application.yml` for the standing
+worker.
+
+## 15. Native `HTTP`/`MONGO`/`MAP`/`GEN` executors — `com.rupeek.l1` is gone (2026-10-22)
+
+§8 documented a deliberate bridge: `RECIPE`-kind nodes delegated to L1's real CEL/HTTP/Mongo engine so the POC
+didn't need its own executors from day one. That bridge is now removed — every production flow node is native,
+`com.rupeek.l1` (108 main + 37 test files, `l1-config/`, `l1-schemas/`, `l1-fixtures/`) is deleted outright, and
+`OperationKind.RECIPE` no longer exists as a value. Full verification: `mvn test` (no filter) — 30 tests, 12
+classes, 0 failures.
+
+**New packages**, each a faithful port of the cited `com.rupeek.l1` code (behavior, not invented) — all in
+`com.rupeek.flow`:
+
+| Package | What it is |
+|---|---|
+| `expr` (+ `expr.fn`) | The CEL engine itself (`CelExpressionEngine`, `TemplateEvaluator`, `RkFunctions`, `ExprLimits`) — genuinely reusable infra around `dev.cel:cel`, not lender business logic. One real change from L1's version: `ScopeDecl` collapsed L1's separate `input`/`params`/`steps` scopes into one `inputs` bag (flow has no step-chaining — a node is one operation) — `CelExpressionEngine`/`TemplateEvaluator` themselves are scope-agnostic, untouched. `ExprLimits.maxExpressionLength` is 4000, double L1's 2000: flow collapses what used to be a recipe step's `in` expression plus a separate operation's own template into one single-node expression, so a legitimately large template can exceed L1's per-step budget in one shot even though it does no more work — a complexity guard, not a security boundary, loosened for a structural reason. |
+| `resource` | `Resource`/`ResourceProvider`/`ClasspathResourceProvider` (classpath-only — no Mongo-backed resource store, resources rarely change), `AuthProvider`/`AuthProviders` (NONE/API_KEY_HEADER/STATIC_BEARER), `SecretResolver`/`EnvSecretResolver`. Resource JSON lives at `src/main/resources/flow-config/resources/*.json` (copied verbatim from `l1-config/resources/`), loaded via `ResourceConfigLoader` (same `PathMatchingResourcePatternResolver` glob pattern L1's `ClasspathConfigLoader` used). `FlowProperties.env` (default `local`) is flow's own active-environment selector — not shared with L1's `l1.env` (which no longer exists). |
+| `audit` | `TaskAuditor`/`TaskCall`/`AuditRecord`/`MongoAuditWriter`/`PiiMasker` — writes the SAME `LenderApiAuditLog` collection, same field contract, per an explicit decision to duplicate (not drop) audit logging even though it's fire-and-forget and nothing in the engine reads it back. No interceptor chain (flow has none) — executors call `TaskAuditor.recordSuccess`/`recordFailure` directly, inline. `requestType() == null` (no `fields.audit`) silently skips the row, same as L1's un-audited ops. |
+| `activity` (root) | `TaskActivityImpl` (the dispatcher — `switch` on `TaskRequest.kind()`), `ErrorClassifier` (ported default-classification rules, `com.rupeek.l1.ops.ErrorClass` collapsed into `TaskFailureType` directly since they were 1:1), `FlowTaskFailure` (one exception type replacing L1's `TransportException`/`OperationException` split), `AuditFields` (shared `audit`/`auditKeys`/`piiPaths`/`lender` field-reading helper for the HTTP/MONGO executors). |
+| `activity.http` | `HttpTaskExecutor` (ported from `HttpOperationExecutor` — same JDK `HttpClient`, same path-safety checks, same auth-header-last ordering, never recorded), `HttpClientFactory`. |
+| `activity.mongo` | `MongoTaskExecutor` (ported from `MongoOperationExecutor`), `MongoQueryBinder` (the `:name` placeholder scheme — NOT CEL, same forbidden-operator denylist `$where`/`$function`/`$accumulator`/`$expr`), `BsonPlain`, `MongoDatabaseProvider`. |
+| `activity.map` | `MapTaskExecutor` — see the outcome-key convention below. |
+| `activity.gen` | `GenTaskExecutor` (`STABLE_ID` via `rk.uuidFrom`, `NOW`). |
+
+**No separate "operation registry."** L1 had two JSON layers (recipe → operation, by ref@version). A flow
+`TaskNode` is already "one op, one node," so the former operation's config is inlined directly into that node's
+own `fields` — two config layers collapsed into one. Trade-off, accepted deliberately: L1 shared one op (e.g.
+`precheck.findByLoanRequest@1`) across ~5 recipes; inlining duplicates that config across every node that needs
+it. `TaskNode.taskRef` remains the seam for a future shared registry if duplication becomes a real problem.
+
+**`TaskNode.fields` schema** (`Map<String,Object>`, was unused dead weight before this — always `{}`):
+
+- `HTTP`: `resource`, `method`, `path`, `query`, `headers`, `body`, `bodyEncoding` (`JSON` default/`FORM`),
+  `success` (CEL, against `{inputs, resp, env}`), `classify` (CEL, same scope, returns a `TaskFailureType` name),
+  `onError` (`{"BUSINESS": "REJECTED"}` — a classified failure with an entry here returns that outcome instead
+  of throwing, mirroring a recipe step's `onError: {"BUSINESS": "return:X"}`), `out` (CEL, same scope),
+  `idempotent`, `audit`, `auditKeys`, `piiPaths`.
+- `MONGO`: `resource`, `collection`, `action` (`FIND_ONE`/`FIND_MANY`/`INSERT`/`UPDATE_ONE`/`UPSERT`), `filter`,
+  `set`, `setOnInsert`, `inc`, `sort`, `projection`, `limit`, `expect`, `out` (CEL, against `{inputs, result}`),
+  `audit`, `auditKeys`. No `onError` — no Mongo op in the whole Axis precheck set ever mapped a failure to an
+  alternate outcome; a Mongo failure always either succeeds or throws.
+- `MAP`: `template` only. The rendered template's root map IS the node's outputs directly (no separate `out`
+  layer — MAP's job is literally "compute the output map").
+- `GEN`: `action` (`STABLE_ID`/`NOW`), `params` (a template map, may contain CEL). Always returns `{"value":
+  <result>}`.
+
+**The `outcome`-key convention (the one thing with no L1 precedent)**: `MapTaskExecutor`'s rendered template may
+contain a reserved `outcome` key — if present, it's popped out and becomes `TaskResult.outcome` (default `OK`
+if absent); the rest becomes `outputs`. This is how L1's pure CEL guards (a recipe step with only `when`/
+`return`, no operation — e.g. `axis.decomposed.dedupe.alreadyDone`) become native nodes with **zero graph-model
+changes**: a MAP node whose template is just `{"outcome": "=<condition> ? 'A' : 'B'"}`. It also let two
+multi-step recipes collapse to ONE node instead of fanning out: `axis.decomposed.status.decision` (a MAP step +
+2 branch-only steps reading the MAP's own computed `value.outcome`) became one MAP node computing
+`dedupe`/`pan`/`ramp`/`hunter`/`overall` AND `outcome` in one pass.
+
+**Fan-out**: a recipe with 2+ real operation steps becomes 2+ chained native nodes with a new edge and node id.
+Confirmed necessary (not just collapsible) for: `dedupe.buildAndCall`/`timble.buildAndCall` (MAP request-build →
+HTTP call — `call_request` then `call`), `statusPersist.auditOutcome` (MONGO read → MONGO write), and a few
+cases MONGO's placeholder-only binding forced that weren't anticipated up front: `statusPersist.saveFinal`
+needed a MAP prep node first to convert a string flag to a real boolean (MONGO `set` can't compute, only bind),
+and `auditOutcome` needed a MAP node to extract a nested field (`InputResolver` only resolves 3-segment
+`$.node.outputs.field` paths, not deeper nesting into a map value).
+
+**`params.`/`input.` → `inputs.`**: every ported CEL expression's L1-era `params.x`/`input.x` prefix becomes
+`inputs.x` (flow has one unified input bag, not L1's separate operation/recipe scopes) — a mechanical rename,
+safe since L1 never mixed the two prefixes in one expression's scope.
+
+**Failure classification**: `ErrorClassifier`'s default rules (not-sent → TECHNICAL; sent + idempotent + 5xx/
+429/502-504 → TECHNICAL; else UNKNOWN; non-2xx/4xx → BUSINESS; non-HTTP failure → PERMANENT) throw
+`FlowTaskFailure`, caught by `TaskActivityImpl` and surfaced as `ApplicationFailure.newFailure(message,
+type.name(), cause)`. `FlowWorkflowImpl.activityOptions()` (the one real change outside the new packages) gained
+`.setDoNotRetry(TaskFailureType.UNKNOWN.name(), TaskFailureType.BUSINESS.name(),
+TaskFailureType.PERMANENT.name())`, paralleling what the RECIPE branch's `L1FailureType` wiring used to do.
+
+**A real bug, found by actually running the tests, worth remembering**: an early version of `TaskActivityImpl`
+ran every executor's output through `PiiMasker.maskPayload` keyed on `PiiMasker.GLOBAL_KEYS` (a blanket
+safety-net idea, no L1 precedent). `GLOBAL_KEYS` includes the generic word `"pan"` — meant for an actual PAN
+*card number* field — which silently masked Axis's unrelated dedupe/PAN-*match* status flag (`Y`/`WIP`/`N`,
+also named `pan`), corrupting a CEL map-lookup on every status-flow run. Fixed by removing the blanket mask:
+L1 never masked an operation's own output values at all, only `LenderApiAuditLog` payloads via each op's
+explicit `piiPaths` (still true here, in `TaskAuditor`). **PII protection on business outputs stays exactly as
+narrow as L1's real guarantee — nodes simply don't declare PII fields as outputs** — not a stronger, invented
+guarantee that breaks on key-name collisions.
+
+**Test fixtures**: `l1-fixtures/axis/*.json` (WireMock response bodies, not L1 logic) copied to
+`src/test/resources/axis-fixtures/` before `l1-fixtures/` was deleted with the rest of `l1`.
+`com.rupeek.flow.activity.FlowMongoTestSupport` replaces `com.rupeek.l1.ops.mongo.MongoTestSupport` (same
+Testcontainers-Mongo-singleton shape). `src/test/java/com/rupeek/flow/activity/TestNativeExecutors.java` is the
+one shared helper every test/dev-runner uses to build a fully-wired `TaskActivityImpl` by hand (the same wiring
+`FlowAutoConfiguration` does for production) — read it before wiring a new test the same way.

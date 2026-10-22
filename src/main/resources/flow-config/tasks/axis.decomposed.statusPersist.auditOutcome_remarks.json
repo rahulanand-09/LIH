@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.statusPersist.auditOutcome_remarks",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "remarks": "=inputs.overall.statusMessage"
+    }
+  }
+}

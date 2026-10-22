@@ -4,7 +4,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Mirrors {@code com.rupeek.l1.registry.RegistryService} — what {@link ResolveFlowActivityImpl} calls. */
+/** What {@link ResolveFlowActivityImpl} calls: the latest published version of each flow/macro ref. */
 public final class FlowRegistryService {
 
     private final FlowSource flows;
@@ -13,7 +13,7 @@ public final class FlowRegistryService {
         this.flows = flows;
     }
 
-    /** @throws com.rupeek.l1.model.ConfigJson.ConfigException if a ref was never published */
+    /** @throws com.rupeek.flow.registry.store.FlowConfigException if a ref was never published */
     public Map<String, Integer> resolve(Collection<String> refs) {
         Map<String, Integer> out = new LinkedHashMap<>();
         for (String ref : refs) {

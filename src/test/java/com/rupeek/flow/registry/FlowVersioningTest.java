@@ -9,7 +9,7 @@ import com.rupeek.flow.model.SubflowNode;
 import com.rupeek.flow.workflow.FlowRunRequest;
 import com.rupeek.flow.workflow.FlowWorkflow;
 import com.rupeek.flow.workflow.FlowWorkflowImpl;
-import com.rupeek.l1.registry.InMemoryConfigStore;
+import com.rupeek.flow.registry.store.InMemoryConfigStore;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;

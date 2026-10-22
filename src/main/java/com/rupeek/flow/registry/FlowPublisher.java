@@ -1,10 +1,10 @@
 package com.rupeek.flow.registry;
 
 import com.rupeek.flow.model.FlowDef;
-import com.rupeek.l1.registry.ConfigCodec;
-import com.rupeek.l1.registry.ConfigStore;
-import com.rupeek.l1.registry.DocType;
-import com.rupeek.l1.registry.StoredVersion;
+import com.rupeek.flow.registry.store.ConfigStore;
+import com.rupeek.flow.registry.store.DocType;
+import com.rupeek.flow.registry.store.FlowConfigCodec;
+import com.rupeek.flow.registry.store.StoredVersion;
 
 import java.time.Clock;
 import java.util.UUID;
@@ -35,9 +35,9 @@ public final class FlowPublisher {
      * @throws IllegalStateException if {@code flow.flowRef()@flow.version()} was already published
      */
     public void publish(FlowDef flow, String publishedBy, String reason) {
-        String json = ConfigCodec.json(flow);
+        String json = FlowConfigCodec.json(flow);
         String publishId = UUID.randomUUID().toString();
-        store.insert(new StoredVersion(DocType.FLOW, flow.flowRef(), flow.version(), json, ConfigCodec.hash(flow),
+        store.insert(new StoredVersion(DocType.FLOW, flow.flowRef(), flow.version(), json, FlowConfigCodec.hash(flow),
                 publishedBy, clock.instant(), reason, publishId));
         store.movePointer(DocType.FLOW, flow.flowRef(), flow.version(), publishedBy, reason, publishId);
     }

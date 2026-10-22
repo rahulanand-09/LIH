@@ -5,16 +5,14 @@ import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.mongodb.client.MongoDatabase;
 import com.rupeek.flow.model.FlowDef;
 import com.rupeek.flow.model.NodeResult;
+import com.rupeek.flow.activity.FlowMongoTestSupport;
+import com.rupeek.flow.activity.TaskActivityImpl;
+import com.rupeek.flow.activity.TestNativeExecutors;
+import com.rupeek.flow.audit.MongoAuditWriter;
+import com.rupeek.flow.expr.fn.RkFunctions;
 import com.rupeek.flow.registry.FlowDefLoader;
 import com.rupeek.flow.registry.ResolveFlowActivity;
-import com.rupeek.l1.expr.fn.RkFunctions;
-import com.rupeek.l1.intercept.MongoAuditWriter;
-import com.rupeek.l1.ops.mongo.MongoTestSupport;
-import com.rupeek.l1.secrets.EnvSecretResolver;
-import com.rupeek.l1.worker.L1Components;
-import com.rupeek.l1.worker.RegistryActivityImpl;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.micrometer.observation.ObservationRegistry;
+import com.rupeek.flow.registry.TestTaskRegistry;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
@@ -28,7 +26,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,20 +42,19 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * M7, fully decomposed and genuinely executable: the Axis precheck as a top-level flow of real {@code SUBFLOW}
- * major blocks (dedupe/timble/timbleCallback/status/notifyFail), each itself a graph of real {@code HTTP}-via-
- * {@code RECIPE} leaf nodes — see docs/flow-lld.md §11b. Every leaf delegates to a brand-new one-step L1 recipe
- * under {@code l1-config/recipes/axis-decomposed/}, each wrapping one already-published, already-tested L1
- * operation — no new HTTP/Mongo/CEL code anywhere. Same fixtures and oracle as {@link AxisPrecheckFlowTest}: this
- * proves the fully-decomposed, multi-subflow version produces identical real-world behaviour to the simple
- * 7-node RECIPE-delegating one, not a second, divergent implementation.
+ * M7, fully decomposed and genuinely executable, now fully on the native-executor path: the Axis precheck as a
+ * top-level flow of real {@code SUBFLOW} major blocks (dedupe/timble/timbleCallback/status/notifyFail), each
+ * itself a graph of real native {@code HTTP}/{@code MONGO}/{@code MAP}/{@code GEN} leaf nodes — see
+ * docs/flow-lld.md's native-executors update. Same fixtures and oracle as {@link AxisPrecheckFlowTest}: this
+ * proves the fully-decomposed, multi-subflow version produces identical real-world behaviour to the flat one,
+ * not a second, divergent implementation.
  */
 class AxisPrecheckDecomposedFlowTest {
 
     private static final String AXIS = "/investor_integration/actions/invoke_api";
     private static final String VERIFY = "/api/loanrequest/precheck-verification";
     private static final String FAILED = "/api/lender/updateprecheckfailure";
-    private static final String QUEUE = "lih-l1";
+    private static final String QUEUE = "lih-l2";
 
     private WireMockServer http;
     private MongoDatabase db;
@@ -85,7 +81,7 @@ class AxisPrecheckDecomposedFlowTest {
         http.stubFor(post(urlPathEqualTo(VERIFY)).willReturn(json("{\"ok\": true}")));
         http.stubFor(post(urlPathEqualTo(FAILED)).willReturn(json("{\"ok\": true}")));
 
-        db = MongoTestSupport.client().getDatabase("lendercore");
+        db = FlowMongoTestSupport.client().getDatabase("lendercore");
         for (String c : List.of("LenderCustomerPrecheck", "LenderCustomerPrecheckAudit", MongoAuditWriter.COLLECTION)) {
             db.getCollection(c).drop();
         }
@@ -93,18 +89,16 @@ class AxisPrecheckDecomposedFlowTest {
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
                 "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
-        L1Components l1 = L1Components.create(new L1Components.Settings("local", "classpath:l1-config", null,
-                Duration.ofSeconds(60), Map.of("lendercore", MongoTestSupport.client()), new EnvSecretResolver(env::get),
-                auditWriter, new SimpleMeterRegistry(), ObservationRegistry.NOOP, env::get, Clock.systemUTC()));
+        TaskActivityImpl taskActivity = TestNativeExecutors.build(env, FlowMongoTestSupport.client(), "lendercore", auditWriter);
+        TestTaskRegistry taskRegistry = TestTaskRegistry.publishAll();
 
         temporal = TestWorkflowEnvironment.newInstance();
         Worker worker = temporal.newWorker(QUEUE);
         worker.registerWorkflowImplementationTypes(FlowWorkflowImpl.class);
-        worker.registerActivitiesImplementations(l1.activity(), new RegistryActivityImpl(l1.registry()),
+        worker.registerActivitiesImplementations(taskActivity, taskRegistry.fetchTaskActivity, taskRegistry.resolveTaskActivity,
                 // The top-level flow and the status subflow each have SUBFLOW nodes, so each resolves a flowRef
-                // list through this engine's own placeholder registry activity (RECIPE refs go through L1's
-                // real RegistryActivity above instead). No real flow-version store exists yet; "always version 1"
-                // is all this needs.
+                // list through this engine's own registry activity. No real flow-version store exists yet;
+                // "always version 1" is all this needs.
                 (ResolveFlowActivity) refs -> refs.stream().collect(java.util.stream.Collectors.toMap(r -> r, r -> 1)));
         temporal.start();
         client = temporal.getWorkflowClient();
@@ -194,7 +188,7 @@ class AxisPrecheckDecomposedFlowTest {
     }
 
     private static String fixture(String name) throws IOException {
-        try (InputStream in = AxisPrecheckDecomposedFlowTest.class.getResourceAsStream("/l1-fixtures/axis/" + name)) {
+        try (InputStream in = AxisPrecheckDecomposedFlowTest.class.getResourceAsStream("/axis-fixtures/" + name)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }

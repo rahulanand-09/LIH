@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.dedupe.inProgress",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=inputs.found && rk.str(inputs.doc.?clientLoanId.orValue(''), '') != inputs.idsValue && !(rk.str(inputs.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null), '').upperAscii() in ['SUCCESS', 'FAILURE']) ? 'IN_PROGRESS' : 'CONTINUE'"
+    }
+  }
+}

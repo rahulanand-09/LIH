@@ -18,7 +18,6 @@
     <temporal.version>1.40.0</temporal.version>
     <cel.version>0.14.0</cel.version>
     <wiremock.version>3.13.2</wiremock.version>
-    <json-schema-validator.version>1.5.8</json-schema-validator.version>
     <!-- CEL needs protobuf 4.x and the -jre Guava; Temporal would otherwise pull protobuf 3.25 and Guava -android.
          Pin one consistent set for both (verified by the Temporal tests). -->
     <protobuf.version>4.35.1</protobuf.version>
@@ -56,6 +55,10 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
     <dependency>
@@ -63,27 +66,11 @@
       <artifactId>temporal-sdk</artifactId>
       <version>${temporal.version}</version>
     </dependency>
-    <!-- Metrics and observations for L1 interceptors (Micrometer) -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-actuator</artifactId>
-    </dependency>
-    <!-- L1 expression language (com.rupeek.l1.expr) -->
+    <!-- com.rupeek.flow.expr's CEL expression engine -->
     <dependency>
       <groupId>dev.cel</groupId>
       <artifactId>cel</artifactId>
       <version>${cel.version}</version>
-    </dependency>
-    <!-- L1 registry caches (compiled versions, resources) -->
-    <dependency>
-      <groupId>com.github.ben-manes.caffeine</groupId>
-      <artifactId>caffeine</artifactId>
-    </dependency>
-    <!-- L1 publish pipeline: JSON Schema validation of config documents -->
-    <dependency>
-      <groupId>com.networknt</groupId>
-      <artifactId>json-schema-validator</artifactId>
-      <version>${json-schema-validator.version}</version>
     </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>
@@ -101,7 +88,7 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
-    <!-- L1 executor tests: mock HTTP server and real Mongo in Docker -->
+    <!-- Native executor tests: mock HTTP server and real Mongo in Docker -->
     <dependency>
       <groupId>org.wiremock</groupId>
       <artifactId>wiremock-standalone</artifactId>
@@ -125,15 +112,6 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
-      </plugin>
-      <!-- L1 config CLI (validate / publish / status / redirect); see docs/l1-config-publishing.md -->
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <configuration>
-          <mainClass>com.rupeek.l1.publish.cli.L1ConfigCli</mainClass>
-          <cleanupDaemonThreads>false</cleanupDaemonThreads>
-        </configuration>
       </plugin>
     </plugins>
   </build>

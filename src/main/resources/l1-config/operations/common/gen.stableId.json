@@ -1,8 +1,0 @@
-{
-  "op": "gen.stableId",
-  "kind": "GEN",
-  "action": "STABLE_ID",
-  "params": { "reuse": { "type": "string" }, "seed": { "type": "string" } },
-  "out": { "value": "result" },
-  "required": ["value"]
-}
