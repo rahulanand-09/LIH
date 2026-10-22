@@ -1,0 +1,11 @@
+{
+  "recipe": "axis.decomposed.timbleCallback.noPrecheck",
+  "lender": "axis",
+  "inputs": { "found": "bool", "doc": "map" },
+  "outputs": { "loanRequestId": "string" },
+  "outcomes": ["NO_PRECHECK", "FOUND"],
+  "steps": [
+    { "id": "check", "when": "!input.found", "return": { "outcome": "NO_PRECHECK" } }
+  ],
+  "return": { "outcome": "FOUND", "out": { "loanRequestId": "input.doc.loanRequestId" } }
+}

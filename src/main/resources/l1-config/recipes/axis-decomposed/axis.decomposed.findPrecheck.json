@@ -1,0 +1,13 @@
+{
+  "recipe": "axis.decomposed.findPrecheck",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string" },
+  "outputs": { "found": "bool", "doc": "map" },
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "existing", "op": "precheck.findByLoanRequest@1", "in": { "loanRequestId": "input.loanRequestId", "lender": "'axis'" } }
+  ],
+  "return": { "outcome": "OK", "out": {
+      "found": "steps.existing.found",
+      "doc": "steps.existing.found ? steps.existing.doc : {}" } }
+}

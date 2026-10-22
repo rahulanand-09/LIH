@@ -1,0 +1,11 @@
+{
+  "recipe": "axis.decomposed.fetchCore",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string" },
+  "outputs": { "customer": "map", "customerId": "string" },
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "core", "op": "core.fetchCustomerByLoanRequest@1", "in": { "loanRequestId": "input.loanRequestId" } }
+  ],
+  "return": { "outcome": "OK", "out": { "customer": "steps.core.customer", "customerId": "rk.str(steps.core.customer.id)" } }
+}

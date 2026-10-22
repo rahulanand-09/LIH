@@ -1,0 +1,12 @@
+{
+  "recipe": "axis.decomposed.timbleCallback.save",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string", "status": "string", "message": "string" },
+  "outputs": {},
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "save", "op": "axis.precheck.saveTimbleStatus@1", "in": {
+        "loanRequestId": "input.loanRequestId", "lender": "'axis'", "status": "input.status", "message": "input.message" } }
+  ],
+  "return": { "outcome": "OK" }
+}

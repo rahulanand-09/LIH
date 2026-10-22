@@ -1,0 +1,26 @@
+{
+  "recipe": "axis.decomposed.status.decision",
+  "lender": "axis",
+  "inputs": { "dedupe": "string", "pan": "string", "ramp": "string", "hunter": "string", "timbleFlag": "string", "doc": "map" },
+  "outputs": { "dedupe": "map", "pan": "map", "ramp": "map", "hunter": "map", "overall": "map" },
+  "outcomes": ["SUCCESS", "FAILURE", "PENDING"],
+  "steps": [
+    { "id": "decision", "op": "map.axis.precheckStatusDecision@1", "in": {
+        "dedupe": "input.dedupe", "pan": "input.pan", "ramp": "input.ramp", "hunter": "input.hunter",
+        "timbleFlag": "input.timbleFlag", "timble": "input.doc.?responseMap.?timble.orValue(null)" } },
+    { "id": "success", "when": "steps.decision.value.outcome == 'SUCCESS'",
+      "return": { "outcome": "SUCCESS", "out": {
+          "dedupe": "steps.decision.value.dedupe", "pan": "steps.decision.value.pan",
+          "ramp": "steps.decision.value.ramp", "hunter": "steps.decision.value.hunter",
+          "overall": "steps.decision.value.overall" } } },
+    { "id": "failure", "when": "steps.decision.value.outcome == 'FAILURE'",
+      "return": { "outcome": "FAILURE", "out": {
+          "dedupe": "steps.decision.value.dedupe", "pan": "steps.decision.value.pan",
+          "ramp": "steps.decision.value.ramp", "hunter": "steps.decision.value.hunter",
+          "overall": "steps.decision.value.overall" } } }
+  ],
+  "return": { "outcome": "PENDING", "out": {
+      "dedupe": "steps.decision.value.dedupe", "pan": "steps.decision.value.pan",
+      "ramp": "steps.decision.value.ramp", "hunter": "steps.decision.value.hunter",
+      "overall": "steps.decision.value.overall" } }
+}

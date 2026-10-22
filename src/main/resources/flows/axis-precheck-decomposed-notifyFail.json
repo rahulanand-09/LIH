@@ -1,0 +1,23 @@
+{
+  "flowRef": "axis-precheck-decomposed-notifyFail",
+  "version": 1,
+  "start": "existing",
+  "nodes": [
+    { "nodeType": "TASK", "id": "existing", "kind": "RECIPE", "taskRef": "axis.decomposed.findPrecheck", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 3, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "buildProfileJson", "kind": "RECIPE", "taskRef": "axis.decomposed.notifyFail.buildProfileJson", "fields": {},
+      "in": { "found": "$.existing.outputs.found", "doc": "$.existing.outputs.doc" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "notify", "kind": "RECIPE", "taskRef": "axis.decomposed.notifyFail.notify", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "lender": "$.in.lender", "profileJson": "$.buildProfileJson.outputs.profileJson" },
+      "onError": { "retries": 3, "then": "PARK" } },
+
+    { "nodeType": "END", "id": "notified", "status": "NOTIFIED", "outputs": {} },
+    { "nodeType": "END", "id": "notAccepted", "status": "NOT_ACCEPTED", "outputs": {} }
+  ],
+  "edges": [
+    { "from": "existing", "on": "OK", "to": "buildProfileJson" },
+    { "from": "buildProfileJson", "on": "OK", "to": "notify" },
+    { "from": "notify", "on": "NOTIFIED", "to": "notified" },
+    { "from": "notify", "on": "NOT_ACCEPTED", "to": "notAccepted" }
+  ]
+}

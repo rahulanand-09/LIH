@@ -1,0 +1,13 @@
+{
+  "recipe": "axis.decomposed.notifyFail.notify",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string", "lender": "string", "profileJson": "string" },
+  "outputs": {},
+  "outcomes": ["NOTIFIED", "NOT_ACCEPTED"],
+  "steps": [
+    { "id": "notify", "op": "rupeekweb.precheck.failure@1", "in": {
+        "loanRequestId": "input.loanRequestId", "lender": "input.lender", "profileJson": "input.profileJson" },
+      "onError": { "BUSINESS": "return:NOT_ACCEPTED" } }
+  ],
+  "return": { "outcome": "NOTIFIED" }
+}

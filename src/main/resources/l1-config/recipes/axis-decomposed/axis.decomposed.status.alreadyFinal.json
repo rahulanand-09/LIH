@@ -1,0 +1,12 @@
+{
+  "recipe": "axis.decomposed.status.alreadyFinal",
+  "lender": "axis",
+  "inputs": { "doc": "map" },
+  "outputs": { "finalStatus": "string" },
+  "outcomes": ["ALREADY_FINAL", "CONTINUE"],
+  "steps": [
+    { "id": "check", "when": "rk.str(input.doc.?responseMap.?axisPreCheckStatus.?status.orValue(null), '').upperAscii() in ['SUCCESS', 'FAILURE']",
+      "return": { "outcome": "ALREADY_FINAL", "out": { "finalStatus": "input.doc.responseMap.axisPreCheckStatus.status" } } }
+  ],
+  "return": { "outcome": "CONTINUE" }
+}

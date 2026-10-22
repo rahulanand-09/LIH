@@ -1,0 +1,13 @@
+{
+  "recipe": "axis.decomposed.status.savePending",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string", "dedupe": "map", "pan": "map", "ramp": "map", "hunter": "map", "overall": "map" },
+  "outputs": {},
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "save", "op": "axis.precheck.saveStatusPending@1", "in": {
+        "loanRequestId": "input.loanRequestId", "lender": "'axis'", "dedupe": "input.dedupe", "pan": "input.pan",
+        "ramp": "input.ramp", "hunter": "input.hunter", "overall": "input.overall" } }
+  ],
+  "return": { "outcome": "OK" }
+}

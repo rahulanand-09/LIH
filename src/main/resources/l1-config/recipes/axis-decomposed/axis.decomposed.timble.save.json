@@ -1,0 +1,13 @@
+{
+  "recipe": "axis.decomposed.timble.save",
+  "lender": "axis",
+  "inputs": { "loanRequestId": "string", "customerId": "string", "referenceId": "string" },
+  "outputs": {},
+  "outcomes": ["OK"],
+  "steps": [
+    { "id": "save", "op": "axis.precheck.saveTimbleRef@1", "in": {
+        "loanRequestId": "input.loanRequestId", "lender": "'axis'", "customerId": "input.customerId",
+        "referenceId": "input.referenceId" } }
+  ],
+  "return": { "outcome": "OK" }
+}
