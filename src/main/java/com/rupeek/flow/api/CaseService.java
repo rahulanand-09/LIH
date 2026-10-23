@@ -63,8 +63,13 @@ public class CaseService {
      */
     public StartResult start(String flowRef, Map<String, Object> inputs, String businessKey, Integer version) {
         require(FLOW_REF, flowRef, "flowRef");
-        String key = businessKey == null || businessKey.isBlank() ? UUID.randomUUID().toString()
-                : require(BUSINESS_KEY, businessKey, "businessKey");
+        // Idempotency key: explicit businessKey, else inputs.loanRequestId (so the id is <flowRef>-<loanRequestId>,
+        // the same id the callback derives), else random. A second start while it runs returns the existing run.
+        Object loanRequestId = inputs == null ? null : inputs.get("loanRequestId");
+        String key = businessKey != null && !businessKey.isBlank() ? require(BUSINESS_KEY, businessKey, "businessKey")
+                : loanRequestId != null && !loanRequestId.toString().isBlank()
+                        ? require(BUSINESS_KEY, loanRequestId.toString(), "inputs.loanRequestId")
+                        : UUID.randomUUID().toString();
         String workflowId = flowRef + "-" + key;
         FlowDef top = flows.flow(flowRef, version != null ? version : flows.latestVersion(flowRef));
 

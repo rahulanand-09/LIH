@@ -148,6 +148,17 @@ class ApiTest {
     }
 
     @Test
+    void workflowIdDefaultsToLoanRequestIdSoRepeatedStartsAreIdempotent() throws Exception {
+        String req = "{\"inputs\":{\"loanRequestId\":\"66f68ccee4bcc50100381f49\"}}";
+        MvcResult first = mvc.perform(json(post("/flows/wait-flow/start"), req)).andExpect(status().isAccepted()).andReturn();
+        assertThat(body(first).get("workflowId").asText()).isEqualTo("wait-flow-66f68ccee4bcc50100381f49");
+
+        MvcResult again = mvc.perform(json(post("/flows/wait-flow/start"), req)).andExpect(status().isOk()).andReturn();
+        assertThat(body(again).get("started").asBoolean()).isFalse();
+        assertThat(body(again).get("runId").asText()).isEqualTo(body(first).get("runId").asText());
+    }
+
+    @Test
     void startWithoutBusinessKeyGeneratesOneAndRejectsBadInput() throws Exception {
         MvcResult r = mvc.perform(json(post("/flows/wait-flow/start"), "{}")).andExpect(status().isAccepted()).andReturn();
         assertThat(body(r).get("workflowId").asText()).startsWith("wait-flow-").hasSizeGreaterThan(20);
