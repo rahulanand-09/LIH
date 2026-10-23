@@ -51,7 +51,8 @@ class HttpLogSafetyTest {
         wm.stubFor(post(urlPathEqualTo("/precheck")).willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"status\":\"OK\",\"pan\":\"" + RESP_PAN + "\"}")));
-        Map<String, String> env = Map.of("AXIS_PRECHECK_BASEURL", wm.baseUrl(), "AXIS_PRECHECK_API_KEY", API_KEY);
+        Map<String, String> env = Map.of("AXIS_PRECHECK_BASEURL", wm.baseUrl(), "AXIS_PRECHECK_API_KEY", API_KEY,
+                "AXIS_PRECHECK_AGREEMENT_ID", "AGR-1");
         ExpressionEngine expressions = new CelExpressionEngine(ExprLimits.DEFAULT, List.of(new RkFunctions()));
         http = new HttpTaskExecutor(new TemplateEvaluator(expressions), expressions,
                 new ClasspathResourceProvider(ResourceConfigLoader.load("classpath:flow-config/resources"), "local", env::get),
