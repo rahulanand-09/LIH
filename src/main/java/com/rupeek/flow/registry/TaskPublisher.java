@@ -10,6 +10,10 @@ import com.rupeek.flow.registry.store.DocType;
 import com.rupeek.flow.registry.store.FlowConfigCodec;
 import com.rupeek.flow.registry.store.StoredVersion;
 
+import com.rupeek.flow.observability.FlowMetrics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Clock;
 import java.util.UUID;
 
@@ -23,6 +27,8 @@ import java.util.UUID;
  * broken expression is rejected here, not discovered the first time a live case runs it.
  */
 public final class TaskPublisher {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TaskPublisher.class);
 
     private final ConfigStore store;
     private final Clock clock;
@@ -46,12 +52,29 @@ public final class TaskPublisher {
      * @throws com.rupeek.flow.expr.ExprCompileException if any CEL in {@code task.fields()} does not compile
      */
     public void publish(TaskDef task, String publishedBy, String reason) {
-        validate(task);
+        try {
+            validate(task);
+        } catch (RuntimeException e) {
+            LOG.warn("task publish REJECTED taskRef={} version={} by={} reason={}: {}", task.taskRef(), task.version(),
+                    publishedBy, e.getClass().getSimpleName(), e.getMessage());
+            FlowMetrics.count(FlowMetrics.REGISTRY_PUBLISH, "type", "TASK", "result", "rejected");
+            throw e;
+        }
         String json = FlowConfigCodec.json(task);
         String publishId = UUID.randomUUID().toString();
-        store.insert(new StoredVersion(DocType.TASK, task.taskRef(), task.version(), json, FlowConfigCodec.hash(task),
-                publishedBy, clock.instant(), reason, publishId));
+        try {
+            store.insert(new StoredVersion(DocType.TASK, task.taskRef(), task.version(), json, FlowConfigCodec.hash(task),
+                    publishedBy, clock.instant(), reason, publishId));
+        } catch (RuntimeException e) {
+            LOG.warn("task publish REJECTED taskRef={} version={} by={} reason={}: {}", task.taskRef(), task.version(),
+                    publishedBy, e.getClass().getSimpleName(), e.getMessage());
+            FlowMetrics.count(FlowMetrics.REGISTRY_PUBLISH, "type", "TASK", "result", "rejected");
+            throw e;
+        }
         store.movePointer(DocType.TASK, task.taskRef(), task.version(), publishedBy, reason, publishId);
+        LOG.info("task publish ACCEPTED taskRef={} version={} by={} publishId={}",
+                task.taskRef(), task.version(), publishedBy, publishId);
+        FlowMetrics.count(FlowMetrics.REGISTRY_PUBLISH, "type", "TASK", "result", "accepted");
     }
 
     /** {@code SOAP}/{@code SFTP}/{@code CUSTOM} have no native executor yet (see {@code OperationKind}) — nothing to compile. */
