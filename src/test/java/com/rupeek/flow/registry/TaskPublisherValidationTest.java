@@ -1,7 +1,7 @@
 package com.rupeek.flow.registry;
 
-import com.rupeek.flow.activity.FlowMongoTestSupport;
-import com.rupeek.flow.activity.TestNativeExecutors;
+import com.rupeek.flow.task.FlowMongoTestSupport;
+import com.rupeek.flow.task.TestNativeExecutors;
 import com.rupeek.flow.expr.ExprCompileException;
 import com.rupeek.flow.model.OperationKind;
 import com.rupeek.flow.model.TaskDef;

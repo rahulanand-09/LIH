@@ -1,7 +1,7 @@
 package com.rupeek.flow.resource;
 
-import com.rupeek.flow.activity.FlowTaskFailure;
-import com.rupeek.flow.activity.TaskFailureType;
+import com.rupeek.flow.task.FlowTaskFailure;
+import com.rupeek.flow.task.TaskFailureType;
 import com.rupeek.flow.resource.Resource.AuthSpec;
 import com.rupeek.flow.resource.Resource.AuthType;
 

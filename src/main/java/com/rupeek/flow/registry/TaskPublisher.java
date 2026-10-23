@@ -1,9 +1,9 @@
 package com.rupeek.flow.registry;
 
-import com.rupeek.flow.activity.gen.GenTaskExecutor;
-import com.rupeek.flow.activity.http.HttpTaskExecutor;
-import com.rupeek.flow.activity.map.MapTaskExecutor;
-import com.rupeek.flow.activity.mongo.MongoTaskExecutor;
+import com.rupeek.flow.task.executor.gen.GenTaskExecutor;
+import com.rupeek.flow.task.executor.http.HttpTaskExecutor;
+import com.rupeek.flow.task.executor.map.MapTaskExecutor;
+import com.rupeek.flow.task.executor.mongo.MongoTaskExecutor;
 import com.rupeek.flow.model.TaskDef;
 import com.rupeek.flow.registry.store.ConfigStore;
 import com.rupeek.flow.registry.store.DocType;

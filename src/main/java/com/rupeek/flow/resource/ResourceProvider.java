@@ -1,6 +1,6 @@
 package com.rupeek.flow.resource;
 
-import com.rupeek.flow.activity.FlowTaskFailure;
+import com.rupeek.flow.task.FlowTaskFailure;
 import java.util.Map;
 
 /**

@@ -1,6 +1,6 @@
 package com.rupeek.flow.resource;
 
-import com.rupeek.flow.activity.FlowTaskFailure;
+import com.rupeek.flow.task.FlowTaskFailure;
 
 /**
  * Turns a {@code secretRef} from config into its value at call time. Values are never logged, recorded or

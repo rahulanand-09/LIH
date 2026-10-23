@@ -1,2 +1,2 @@
-com.rupeek.flow.worker.FlowAutoConfiguration
-com.rupeek.flow.worker.FlowRegistryAutoConfiguration
+com.rupeek.flow.config.FlowAutoConfiguration
+com.rupeek.flow.config.FlowRegistryAutoConfiguration

@@ -1,6 +1,6 @@
 package com.rupeek.flow.registry.store;
 
-import com.rupeek.flow.activity.FlowMongoTestSupport;
+import com.rupeek.flow.task.FlowMongoTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * {@link SpringDataConfigStore} against a real (Testcontainers) Mongo — repositories built directly via
  * {@link MongoRepositoryFactory}, no Spring context needed, same "hand-wire it" convention
- * {@link com.rupeek.flow.activity.TestNativeExecutors} already uses for the native executors.
+ * {@link com.rupeek.flow.task.TestNativeExecutors} already uses for the native executors.
  */
 class SpringDataConfigStoreTest {
 

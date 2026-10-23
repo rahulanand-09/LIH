@@ -1,14 +1,17 @@
 package com.rupeek.flow.registry;
 
+import com.rupeek.flow.registry.activity.FetchFlowActivityImpl;
+import com.rupeek.flow.registry.activity.ResolveFlowActivityImpl;
+
 import com.rupeek.flow.model.Edge;
 import com.rupeek.flow.model.EndNode;
 import com.rupeek.flow.model.FlowDef;
 import com.rupeek.flow.model.NodeResult;
 import com.rupeek.flow.model.OnError;
 import com.rupeek.flow.model.SubflowNode;
-import com.rupeek.flow.workflow.FlowRunRequest;
-import com.rupeek.flow.workflow.FlowWorkflow;
-import com.rupeek.flow.workflow.FlowWorkflowImpl;
+import com.rupeek.flow.engine.FlowRunRequest;
+import com.rupeek.flow.engine.FlowWorkflow;
+import com.rupeek.flow.engine.FlowWorkflowImpl;
 import com.rupeek.flow.registry.store.InMemoryConfigStore;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;

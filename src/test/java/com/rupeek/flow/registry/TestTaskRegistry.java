@@ -1,8 +1,10 @@
 package com.rupeek.flow.registry;
 
-import com.rupeek.flow.activity.FlowMongoTestSupport;
-import com.rupeek.flow.activity.TestNativeExecutors;
+import com.rupeek.flow.task.FlowMongoTestSupport;
+import com.rupeek.flow.task.TestNativeExecutors;
 import com.rupeek.flow.model.TaskDef;
+import com.rupeek.flow.registry.activity.FetchTaskActivityImpl;
+import com.rupeek.flow.registry.activity.ResolveTaskActivityImpl;
 import com.rupeek.flow.registry.store.InMemoryConfigStore;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -16,7 +18,7 @@ import java.util.Map;
  * Loads every {@code flow-config/tasks/*.json} task def and publishes it into a real (in-memory, fast)
  * {@link InMemoryConfigStore}, then hands back ready-to-register {@link FetchTaskActivityImpl}/
  * {@link ResolveTaskActivityImpl} — the task-registry counterpart of
- * {@code com.rupeek.flow.activity.TestNativeExecutors}'s role for the executor stack. No flat-map shortcut
+ * {@code com.rupeek.flow.task.TestNativeExecutors}'s role for the executor stack. No flat-map shortcut
  * exists for tasks (see docs/flow-lld.md §16) — this is the one real path every test goes through, same as
  * production.
  */

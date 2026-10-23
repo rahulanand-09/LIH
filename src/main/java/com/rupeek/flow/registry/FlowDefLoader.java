@@ -10,7 +10,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 
 /**
- * Loads a {@link FlowDef} from a classpath JSON resource — e.g. {@code /flows/axis-precheck.json}. This is a
+ * Loads a {@link FlowDef} from a classpath JSON resource — e.g. {@code /flow-config/flows/axis-precheck.json}. This is a
  * file read, not a registry: no versioning, no publish-time validation, no runtime pinning lifecycle. A real
  * published/versioned flow store (M6's {@code ResolveFlowActivity} is the seam for it) is out of scope for this
  * engine; this just proves the schema is genuinely config, not only a set of Java-constructed test fixtures.

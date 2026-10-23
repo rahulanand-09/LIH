@@ -1,11 +1,13 @@
 package com.rupeek.flow.worker;
 
-import com.rupeek.flow.activity.TaskActivityImpl;
-import com.rupeek.flow.registry.FetchFlowActivityImpl;
-import com.rupeek.flow.registry.FetchTaskActivityImpl;
-import com.rupeek.flow.registry.ResolveFlowActivityImpl;
-import com.rupeek.flow.registry.ResolveTaskActivityImpl;
-import com.rupeek.flow.workflow.FlowWorkflowImpl;
+import com.rupeek.flow.config.FlowProperties;
+
+import com.rupeek.flow.task.TaskActivityImpl;
+import com.rupeek.flow.registry.activity.FetchFlowActivityImpl;
+import com.rupeek.flow.registry.activity.FetchTaskActivityImpl;
+import com.rupeek.flow.registry.activity.ResolveFlowActivityImpl;
+import com.rupeek.flow.registry.activity.ResolveTaskActivityImpl;
+import com.rupeek.flow.engine.FlowWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
