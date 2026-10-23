@@ -25,13 +25,13 @@ only SUBFLOW composition happens in workflow code.
 | Package | What's in it |
 |---|---|
 | `com.rupeek.flow.model` | The node/edge schema — plain data, no Temporal imports. `FlowDef`, the sealed `Node` interface and its six records, `Edge`, `OnError`, `NodeResult`, `OperationKind`. |
-| `com.rupeek.flow.activity` | The engine's own generic leaf-TASK contract (`TaskActivity`/`TaskRequest`/`TaskResult`/`TaskFailureType`), now with real implementations (§15): `TaskActivityImpl` (the dispatcher), `ErrorClassifier`, `FlowTaskFailure`, `AuditFields`. |
-| `com.rupeek.flow.activity.{http,mongo,map,gen}` | The four native executors (§15): `HttpTaskExecutor`, `MongoTaskExecutor`, `MapTaskExecutor`, `GenTaskExecutor`, plus their own small support classes (`HttpClientFactory`, `MongoQueryBinder`, `BsonPlain`, `MongoDatabaseProvider`). |
+| `com.rupeek.flow.task` | The engine's own generic leaf-TASK contract (`TaskActivity`/`TaskRequest`/`TaskResult`/`TaskFailureType`), now with real implementations (§15): `TaskActivityImpl` (the dispatcher), `ErrorClassifier`, `FlowTaskFailure`, `AuditFields`. |
+| `com.rupeek.flow.task.executor.{http,mongo,map,gen}` | The four native executors (§15): `HttpTaskExecutor`, `MongoTaskExecutor`, `MapTaskExecutor`, `GenTaskExecutor`, plus their own small support classes (`HttpClientFactory`, `MongoQueryBinder`, `BsonPlain`, `MongoDatabaseProvider`). |
 | `com.rupeek.flow.expr` (+ `.fn`) | The CEL expression/template engine (§15) — `CelExpressionEngine`, `TemplateEvaluator`, `RkFunctions`, `ExprLimits`, `ScopeDecl`. |
 | `com.rupeek.flow.resource` | HTTP/MONGO resource config, auth and secrets (§15) — `Resource`, `ResourceProvider`/`ClasspathResourceProvider`, `AuthProvider`/`AuthProviders`, `SecretResolver`/`EnvSecretResolver`. |
 | `com.rupeek.flow.audit` | `LenderApiAuditLog` writing and PII masking (§15) — `TaskAuditor`, `TaskCall`, `AuditRecord`, `MongoAuditWriter`, `PiiMasker`. |
-| `com.rupeek.flow.workflow` | The interpreter itself: `FlowWorkflow` (the one `@WorkflowInterface`, reused at every depth), `FlowWorkflowImpl`, `FlowRunRequest`, `InputResolver`, `ResumeAction`, `FlowState`. |
-| `com.rupeek.flow.registry` | Version pinning, real now (§9): `ResolveFlowActivity`/`ResolveFlowActivityImpl`, `FetchFlowActivity`/`FetchFlowActivityImpl`, `FlowSource`/`StoreFlowSource`, `FlowRegistryService`, `FlowPublisher`, and `FlowDefLoader` (loads/parses a `FlowDef` from JSON). |
+| `com.rupeek.flow.engine` | The interpreter itself: `FlowWorkflow` (the one `@WorkflowInterface`, reused at every depth), `FlowWorkflowImpl`, `FlowRunRequest`, `InputResolver`, `ResumeAction`, `FlowState`. |
+| `com.rupeek.flow.registry` (+ `.activity` for the Fetch*/Resolve* activities) | Version pinning, real now (§9): `ResolveFlowActivity`/`ResolveFlowActivityImpl`, `FetchFlowActivity`/`FetchFlowActivityImpl`, `FlowSource`/`StoreFlowSource`, `FlowRegistryService`, `FlowPublisher`, and `FlowDefLoader` (loads/parses a `FlowDef` from JSON). |
 | `com.rupeek.flow.registry.store` | Flow's own registry storage (§9's 2026-10-22 update) — `ConfigStore`, `DocType` (one value, `FLOW`), `StoredVersion`, `FlowConfigCodec`, `FlowConfigException`, `MongoConfigStore`/`InMemoryConfigStore`/`RedisConfigStore`. |
 
 Deleted entirely as dead code superseded by this package: `com.rupeek.lender.*` (old DTOs/entities) and
@@ -263,7 +263,7 @@ files, `l1-config/`, `l1-schemas/`). Kept below for the historical "why a bridge
 as §9's own 2026-10-21 history is kept — nothing in this section is current architecture.
 
 A `TaskNode` is either a flow-native generic operation (`HTTP`/`SOAP`/`SFTP`/`MONGO`/`MAP`/`GEN`, executed via
-the engine's own `com.rupeek.flow.activity.TaskActivity`) or `RECIPE` — delegate the whole node to a published
+the engine's own `com.rupeek.flow.task.TaskActivity`) or `RECIPE` — delegate the whole node to a published
 L1 recipe, via L1's own real activities on their own task queue:
 
 ```java
@@ -383,21 +383,21 @@ working replacement in hand. Until that lands, this is the one intentional `com.
 ## 10. `FlowDefLoader` — a classpath file read, and the seam §9 plugs into
 
 ```java
-FlowDef flow = FlowDefLoader.loadFromClasspath("/flows/axis-precheck.json");
+FlowDef flow = FlowDefLoader.loadFromClasspath("/flow-config/flows/axis-precheck.json");
 FlowDef sameShape = FlowDefLoader.parse(jsonString);   // e.g. a StoredVersion's specJson, straight from the registry
 ```
 
 A plain Jackson read (`JavaTimeModule` registered, for `WaitNode.timeout()`) — `loadFromClasspath` for a file on
 disk, `parse` for a JSON string already in hand (added once §9 needed to turn a `StoredVersion.specJson()` back
 into a `FlowDef`, same mapper, no second config). `AxisPrecheckFlowTest` loads the real Axis precheck flow this
-way, from `src/main/resources/flows/axis-precheck.json` — the config is what the test actually runs, not a
+way, from `src/main/resources/flow-config/flows/axis-precheck.json` — the config is what the test actually runs, not a
 separate document that could drift from it. This stays the primary path for everything in `src/main/resources/
 flows/` — nothing here was published into the real registry *except* for §13's versioning demo, which publishes
 copies of the same files specifically to exercise that path.
 
 ## 11. Axis precheck — the flow itself
 
-`src/main/resources/flows/axis-precheck.json`, 7 TASK nodes (all `RECIPE`) + 1 WAIT + 3 END:
+`src/main/resources/flow-config/flows/axis-precheck.json`, 7 TASK nodes (all `RECIPE`) + 1 WAIT + 3 END:
 
 | id | recipe (`taskRef`) | outcomes → edge |
 |---|---|---|
@@ -464,7 +464,7 @@ or transform step between the file on disk and `FlowDefLoader.loadFromClasspath(
 
 ### 11b. The fully-decomposed, genuinely executable reference
 
-`src/main/resources/flows/axis-precheck-decomposed*.json` is a second, parallel implementation of §11's same
+`src/main/resources/flow-config/flows/axis-precheck-decomposed*.json` is a second, parallel implementation of §11's same
 Axis precheck, broken into major blocks per the original ask ("top level with major blocks, then subflows with
 every step in between") rather than left as 7 opaque `RECIPE` nodes. Unlike the old 50-node flat reference this
 section used to describe (deleted — it only schema-verified, nothing executed it), **every node here is real**:
@@ -554,7 +554,7 @@ recipes under `l1-config/recipes/axis-decomposed/`:**
 | `AxisPrecheckFlowTest` | M7 | the real flow (§11), loaded from real config (§10), against real L1 recipes + real Mongo (Testcontainers) + WireMock — approved / rejected / already-in-progress |
 | `AxisPrecheckDecomposedFlowTest` | M7, decomposed | §11b's multi-`SUBFLOW` decomposition, same oracle/fixtures as `AxisPrecheckFlowTest` — proves 3 levels of real child-workflow recursion (top → dedupe/timble/timbleCallback/status → status-persist) produce identical outcomes/Mongo documents to the simple 7-node version |
 
-M1–M6 use toy/synthetic flows and a test-double `com.rupeek.flow.activity.TaskActivity`, so none of them need
+M1–M6 use toy/synthetic flows and a test-double `com.rupeek.flow.task.TaskActivity`, so none of them need
 real I/O. The two Axis tests are the ones that pull in `L1Components`/`RegistryActivityImpl` (L1's real worker
 wiring) and a real `mongo:7.0` Testcontainers instance — expect the first run in a clean environment to spend a
 while pulling that image. `AxisPrecheckDecomposedFlowTest` additionally registers a trivial `ResolveFlowActivity`
@@ -570,7 +570,7 @@ version-resolution activity task just sits unclaimed forever.
 
 Everything above also runs against a REAL local Temporal server (`temporal server start-dev`, gRPC
 `localhost:7233`, Web UI `localhost:8233`), not only `TestWorkflowEnvironment` — these runners are plain `main()`
-classes under `src/test/java/com/rupeek/flow/dev/` (test-scoped, so they can reuse `L1Components`/WireMock/
+classes under `src/dev/java/com/rupeek/flow/dev/` (added to the test classpath via build-helper) (test-scoped, so they can reuse `L1Components`/WireMock/
 Testcontainers-Mongo exactly like the tests do), run with:
 
 ```bash
@@ -588,7 +588,7 @@ java -cp target/classes:target/test-classes:$(cat /tmp/lih-cp.txt) com.rupeek.fl
 
 **Where v1 and v2 actually are**, for `FlowVersioningDemoRunner`:
 
-- **v1** — `src/main/resources/flows/axis-precheck-decomposed-coreAndStableId.json` (§7a's macro, as extracted
+- **v1** — `src/main/resources/flow-config/flows/axis-precheck-decomposed-coreAndStableId.json` (§7a's macro, as extracted
   from `dedupe`/`timble` — 4 `TASK` + 1 `END`: `core → existing → seed → ids → done`). This is the real,
   committed file every other runner/test in this doc also loads via `FlowDefLoader.loadFromClasspath`.
 - **v2** — `src/test/resources/flows-v2/axis-precheck-decomposed-coreAndStableId-v2.json` (test-scoped on
@@ -611,7 +611,7 @@ with `mvn spring-boot:run` or the built jar. It activates exactly ONE Spring Boo
 (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`) — there was a second,
 `com.rupeek.l1.worker.L1AutoConfiguration`, until §15's migration deleted `com.rupeek.l1` entirely:
 
-- **`com.rupeek.flow.worker.FlowAutoConfiguration`** (`flow.enabled=true`) — the flow engine: `StoreFlowSource`/
+- **`com.rupeek.flow.config.FlowAutoConfiguration`** (`flow.enabled=true`) — the flow engine: `StoreFlowSource`/
   `FlowRegistryService`/`ResolveFlowActivityImpl`/`FetchFlowActivityImpl` over flow's own
   `FlowAutoConfiguration.RegistryConnection`/`ConfigStore` (`com.rupeek.flow.registry.store`, §9's 2026-10-22
   update) — its own Mongo database (`flow.registry.database`, default `lih_flow_config`) — plus a `FlowPublisher`
@@ -722,7 +722,7 @@ guarantee that breaks on key-name collisions.
 
 **Test fixtures**: `l1-fixtures/axis/*.json` (WireMock response bodies, not L1 logic) copied to
 `src/test/resources/axis-fixtures/` before `l1-fixtures/` was deleted with the rest of `l1`.
-`com.rupeek.flow.activity.FlowMongoTestSupport` replaces `com.rupeek.l1.ops.mongo.MongoTestSupport` (same
-Testcontainers-Mongo-singleton shape). `src/test/java/com/rupeek/flow/activity/TestNativeExecutors.java` is the
+`com.rupeek.flow.task.FlowMongoTestSupport` replaces `com.rupeek.l1.ops.mongo.MongoTestSupport` (same
+Testcontainers-Mongo-singleton shape). `src/test/java/com/rupeek/flow/task/TestNativeExecutors.java` is the
 one shared helper every test/dev-runner uses to build a fully-wired `TaskActivityImpl` by hand (the same wiring
 `FlowAutoConfiguration` does for production) — read it before wiring a new test the same way.
