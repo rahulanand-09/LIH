@@ -1,6 +1,6 @@
 {
   "taskRef": "precheck.findByLoanRequest",
-  "version": 1,
+  "version": 2,
   "kind": "MONGO",
   "fields": {
     "resource": "lendercore-mongo",
@@ -12,7 +12,8 @@
     },
     "out": {
       "found": "result != null",
-      "doc": "result != null ? result : {}"
+      "doc": "result != null ? result : {}",
+      "customerId": "result != null ? rk.str(result.?customerId.orValue(null)) : null"
     }
   }
 }

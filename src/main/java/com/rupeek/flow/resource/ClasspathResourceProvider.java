@@ -40,6 +40,39 @@ public final class ClasspathResourceProvider implements ResourceProvider {
         return envName;
     }
 
+    /** {@code ${NAME}} or {@code ${NAME:default}} as the whole string value. */
+    private static final java.util.regex.Pattern PLACEHOLDER =
+            java.util.regex.Pattern.compile("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::(.*))?}$");
+
+    /**
+     * The resource's non-secret {@code values} with any whole-string {@code ${ENV_VAR}} / {@code ${ENV_VAR:default}}
+     * resolved from the environment, so an id like Axis's {@code preCheckAgreementId} can be supplied per
+     * deployment without editing JSON. No default and not set is a PERMANENT failure, never a silent blank.
+     */
+    @Override
+    public Map<String, Object> values(Resource resource) {
+        Map<String, Object> raw = ResourceProvider.super.values(resource);
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        raw.forEach((k, v) -> out.put(k, v instanceof String s ? resolve(resource, k, s) : v));
+        return out;
+    }
+
+    private Object resolve(Resource resource, String key, String value) {
+        java.util.regex.Matcher m = PLACEHOLDER.matcher(value);
+        if (!m.matches()) {
+            return value;
+        }
+        String fromEnv = envLookup.apply(m.group(1));
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        if (m.group(2) != null) {
+            return m.group(2);
+        }
+        throw new FlowTaskFailure(TaskFailureType.PERMANENT, "resource '" + resource.resource() + "': value '" + key
+                + "' needs environment variable '" + m.group(1) + "', which is not set");
+    }
+
     @Override
     public Resource resource(String id) {
         Resource r = resources.get(id);

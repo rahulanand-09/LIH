@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.dedupe.abortRemarks",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "remarks": "='Axis precheck re-run aborted, invalid dedupe or timble response for loanRequestId ' + inputs.loanRequestId"
+    }
+  }
+}

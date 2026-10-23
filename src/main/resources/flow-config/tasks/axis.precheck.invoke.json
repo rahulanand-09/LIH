@@ -1,6 +1,6 @@
 {
   "taskRef": "axis.precheck.invoke",
-  "version": 1,
+  "version": 2,
   "kind": "HTTP",
   "fields": {
     "resource": "axis-precheck",
@@ -10,7 +10,7 @@
       "type": "dedupe"
     },
     "body": "=inputs.body",
-    "success": "resp.status == 200 && resp.body.?errors.orValue([]).size() == 0 && has(resp.body.data)",
+    "success": "resp.status == 200 && resp.body.?errors.orValue([]).size() == 0 && resp.body.?data.orValue(null) != null",
     "classify": "resp.status == 500 ? 'UNKNOWN' : resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
     "out": {
       "applicantId": "resp.body.?data.?applicantId.orValue(null)"
@@ -19,6 +19,11 @@
       "BUSINESS": "REJECTED"
     },
     "audit": "PRECHECK_DEDUPE",
+    "lender": "axis",
+    "auditKeys": {
+      "loanRequestId": "=inputs.loanRequestId",
+      "customerId": "=inputs.customerId"
+    },
     "piiPaths": [
       "$.aadhar_number",
       "$.dedupe_ids[*].id_value",

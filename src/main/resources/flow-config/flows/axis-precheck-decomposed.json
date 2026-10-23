@@ -1,6 +1,6 @@
 {
   "flowRef": "axis-precheck-decomposed",
-  "version": 1,
+  "version": 2,
   "start": "dedupe",
   "nodes": [
     { "nodeType": "SUBFLOW", "id": "dedupe", "flowRef": "axis-precheck-decomposed-dedupe",
@@ -28,6 +28,7 @@
     { "from": "dedupe", "on": "INITIATED", "to": "timble" },
     { "from": "dedupe", "on": "ALREADY_INITIATED", "to": "timble" },
     { "from": "dedupe", "on": "REJECTED", "to": "timble" },
+    { "from": "dedupe", "on": "ABORTED", "to": "rejected" },
 
     { "from": "timble", "on": "INITIATED", "to": "waitCallback" },
     { "from": "timble", "on": "ALREADY_INITIATED", "to": "waitCallback" },
@@ -42,6 +43,7 @@
     { "from": "status", "on": "SUCCESS", "to": "notifyOk" },
     { "from": "status", "on": "FAILURE", "to": "notifyFail" },
     { "from": "status", "on": "ALREADY_FINAL", "to": "approved" },
+    { "from": "status", "on": "ALREADY_FAILED", "to": "rejected" },
     { "from": "status", "on": "NO_PRECHECK", "to": "rejected" },
 
     { "from": "notifyOk", "on": "OK", "to": "approved" },

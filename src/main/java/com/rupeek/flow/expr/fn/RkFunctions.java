@@ -42,6 +42,8 @@ import java.util.UUID;
  *   <tr><td>{@code rk.date.format(v, from, to)}, {@code rk.date.parse(v, from)}</td><td>date conversion; {@code 'ISO'} accepts ISO dates and date-times</td></tr>
  *   <tr><td>{@code rk.mask(v, keepLast)}</td><td>{@code XXXXXX1234}; null stays null</td></tr>
  *   <tr><td>{@code rk.nameSplit(customer, 'first'|'middle'|'last')}</td><td>legacy name rule (see method)</td></tr>
+ *   <tr><td>{@code rk.compact(map)}</td><td>drops entries whose value is null, an empty string or an empty list/map
+ *       (top level only) -- Jackson's {@code NON_EMPTY}, as legacy's {@code ResponseMap} serialises</td></tr>
  *   <tr><td>{@code rk.uuidFrom(seed)}</td><td>name-based UUID v5; same seed, same id</td></tr>
  *   <tr><td>{@code rk.str(v)}, {@code rk.str(v, default)}</td><td>scalar as a string, null stays null (or
  *       {@code default}); mirrors a Java {@code String} DTO field and {@code Objects.toString(v, default)}</td></tr>
@@ -49,7 +51,7 @@ import java.util.UUID;
  */
 public final class RkFunctions implements FunctionLibrary {
 
-    public static final String VERSION = "2";
+    public static final String VERSION = "3";
 
     /** Namespace for {@link #uuidFrom(String)} (RFC 4122 URL namespace). */
     private static final UUID UUID_NAMESPACE = UUID.fromString("6ba7b811-9dad-11d1-80b4-00c04fd430c8");
@@ -93,6 +95,7 @@ public final class RkFunctions implements FunctionLibrary {
                 a -> CelValues.isNull(a[0]) ? null : mask(String.valueOf(a[0]), (Long) a[1]));
         add("rk.nameSplit", "rk_nameSplit", dyn, List.of(dyn, str), List.of(Object.class, String.class),
                 a -> nameSplit(map(a[0], "rk.nameSplit"), (String) a[1]));
+        add("rk.compact", "rk_compact", dyn, List.of(dyn), List.of(Object.class), a -> compact(a[0]));
         add("rk.uuidFrom", "rk_uuidFrom", str, List.of(str), List.of(String.class), a -> uuidFrom((String) a[0]));
         add("rk.str", "rk_str", dyn, List.of(dyn), List.of(Object.class), a -> str(a[0]));
         add("rk.str", "rk_str_default", dyn, List.of(dyn, str), List.of(Object.class, String.class),
@@ -271,6 +274,23 @@ public final class RkFunctions implements FunctionLibrary {
             return v.toString();
         }
         throw new IllegalArgumentException("rk.str: expected a scalar, got " + v.getClass().getSimpleName());
+    }
+
+    /** Top-level {@code NON_EMPTY}: keeps an entry unless its value is null, "" or an empty list/map. */
+    public static Map<String, Object> compact(Object value) {
+        Object plain = CelValues.fromCel(value);
+        if (!(plain instanceof Map<?, ?> m)) {
+            throw new IllegalArgumentException("rk.compact: expected a map but got " + display(value));
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        m.forEach((k, v) -> {
+            boolean empty = v == null || (v instanceof String s && s.isEmpty())
+                    || (v instanceof List<?> l && l.isEmpty()) || (v instanceof Map<?, ?> mm && mm.isEmpty());
+            if (!empty) {
+                out.put(String.valueOf(k), v);
+            }
+        });
+        return out;
     }
 
     /** Name-based UUID version 5 (SHA-1) of {@code seed}: retries that use the same seed send the same id. */

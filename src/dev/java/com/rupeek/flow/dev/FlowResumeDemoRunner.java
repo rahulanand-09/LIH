@@ -59,7 +59,7 @@ public final class FlowResumeDemoRunner {
         MongoDatabase db = FlowMongoTestSupport.client().getDatabase("lendercore");
         MongoAuditWriter auditWriter = new MongoAuditWriter(db, 100);
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
-                "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
+                "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key", "AXIS_PRECHECK_AGREEMENT_ID", "test-agreement",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
         TaskActivityImpl taskActivity = TestNativeExecutors.build(env, FlowMongoTestSupport.client(), "lendercore", auditWriter);
 

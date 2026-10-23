@@ -1,6 +1,6 @@
 {
   "taskRef": "axis.precheck.status",
-  "version": 1,
+  "version": 2,
   "kind": "HTTP",
   "fields": {
     "resource": "axis-precheck",
@@ -19,6 +19,11 @@
       "ramp": "resp.body.ramp",
       "hunter": "resp.body.hunter"
     },
-    "audit": "PRECHECK_STATUS"
+    "audit": "PRECHECK_STATUS",
+    "lender": "axis",
+    "auditKeys": {
+      "loanRequestId": "=inputs.loanRequestId",
+      "customerId": "=inputs.customerId"
+    }
   }
 }

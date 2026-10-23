@@ -1,6 +1,6 @@
 {
   "flowRef": "axis-precheck-decomposed-timble",
-  "version": 1,
+  "version": 2,
   "start": "fetchCoreAndStableId",
   "nodes": [
     { "nodeType": "SUBFLOW", "id": "fetchCoreAndStableId", "flowRef": "axis-precheck-decomposed-coreAndStableId",
@@ -14,7 +14,8 @@
       "in": { "customer": "$.fetchCoreAndStableId.outputs.customer", "clientLoanId": "$.fetchCoreAndStableId.outputs.idsValue" },
       "onError": { "retries": 5, "then": "PARK" } },
     { "nodeType": "TASK", "id": "call", "kind": "HTTP", "taskRef": "axis.precheck.timble", "fields": {},
-      "in": { "body": "$.call_request.outputs" },
+      "in": { "body": "$.call_request.outputs", "loanRequestId": "$.in.loanRequestId",
+        "customerId": "$.fetchCoreAndStableId.outputs.customerId" },
       "onError": { "retries": 5, "then": "PARK" } },
     { "nodeType": "TASK", "id": "save", "kind": "MONGO", "taskRef": "axis.precheck.saveTimbleRef", "fields": {},
       "in": { "loanRequestId": "$.in.loanRequestId", "customerId": "$.fetchCoreAndStableId.outputs.customerId",
