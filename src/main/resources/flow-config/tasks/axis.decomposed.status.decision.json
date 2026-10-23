@@ -1,6 +1,6 @@
 {
   "taskRef": "axis.decomposed.status.decision",
-  "version": 1,
+  "version": 2,
   "kind": "MAP",
   "fields": {
     "template": {
@@ -21,7 +21,7 @@
         "status": "={'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.hunter]",
         "statusMessage": ""
       },
-      "overall": "=cel.bind(o, cel.bind(f, [inputs.dedupe, inputs.pan, inputs.ramp, inputs.hunter, inputs.timbleFlag], f.all(x, x == 'Y') ? 'SUCCESS' : f.exists(x, x == 'N') ? 'FAILURE' : 'PENDING'), o == 'SUCCESS' ? {'status': 'SUCCESS', 'statusMessage': 'PreCheck success for the loanRequest'} : o == 'FAILURE' ? {'status': 'FAILURE', 'statusMessage': 'Precheck failure received from lender services : ' + rk.json({'customerAcceptanceStatus': null, 'customerBlacklistStatus': null, 'axisPreCheckStatus': null, 'dedupe': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.dedupe], 'statusMessage': ''}, 'pan': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.pan], 'statusMessage': ''}, 'ramp': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.ramp], 'statusMessage': ''}, 'hunter': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.hunter], 'statusMessage': ''}, 'timble': inputs.doc.?responseMap.?timble.orValue(null) == null ? null : dyn({'status': inputs.doc.responseMap.timble.?status.orValue(null), 'statusMessage': inputs.doc.responseMap.timble.?statusMessage.orValue(null)})})} : {'status': 'PENDING', 'statusMessage': 'One of the services is giving WIP'})"
+      "overall": "=cel.bind(o, cel.bind(f, [inputs.dedupe, inputs.pan, inputs.ramp, inputs.hunter, inputs.timbleFlag], f.all(x, x == 'Y') ? 'SUCCESS' : f.exists(x, x == 'N') ? 'FAILURE' : 'PENDING'), o == 'SUCCESS' ? {'status': 'SUCCESS', 'statusMessage': 'PreCheck success for the loanRequest'} : o == 'FAILURE' ? {'status': 'FAILURE', 'statusMessage': 'Precheck failure received from lender services : ' + rk.json(rk.compact({'dedupe': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.dedupe], 'statusMessage': ''}, 'pan': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.pan], 'statusMessage': ''}, 'ramp': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.ramp], 'statusMessage': ''}, 'hunter': {'status': {'Y': 'SUCCESS', 'WIP': 'PENDING', 'N': 'FAILURE'}[inputs.hunter], 'statusMessage': ''}, 'timble': inputs.doc.?responseMap.?timble.orValue(null) == null ? null : dyn({'status': inputs.doc.responseMap.timble.?status.orValue(null), 'statusMessage': inputs.doc.responseMap.timble.?statusMessage.orValue(null)})}))} : {'status': 'PENDING', 'statusMessage': 'One of the services is giving WIP'})"
     }
   }
 }

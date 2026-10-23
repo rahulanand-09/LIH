@@ -71,7 +71,7 @@ public final class FlowDemoRunner {
         }
         com.rupeek.flow.audit.MongoAuditWriter auditWriter = new com.rupeek.flow.audit.MongoAuditWriter(db, 100);
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
-                "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
+                "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key", "AXIS_PRECHECK_AGREEMENT_ID", "test-agreement",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
         TaskActivityImpl taskActivity = TestNativeExecutors.build(env, FlowMongoTestSupport.client(), "lendercore", auditWriter);
         TestTaskRegistry taskRegistry = TestTaskRegistry.publishAll();

@@ -81,7 +81,7 @@ public final class FlowWorkerDaemon {
         MongoDatabase lendercore = mongo.getDatabase("lendercore");
         MongoAuditWriter auditWriter = new MongoAuditWriter(lendercore, 100);
         Map<String, String> env = Map.of("CORE_BASEURL", http.baseUrl(), "CORE_TOKEN", "core-token",
-                "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key",
+                "AXIS_PRECHECK_BASEURL", http.baseUrl(), "AXIS_PRECHECK_API_KEY", "axis-key", "AXIS_PRECHECK_AGREEMENT_ID", "test-agreement",
                 "RUPEEKWEB_BASEURL", http.baseUrl(), "RUPEEKWEB_ADMIN_TOKEN", "admin-token");
         TestNativeExecutors.Executors executors = TestNativeExecutors.buildExecutors(env, mongo, "lendercore", auditWriter);
         TaskActivityImpl taskActivity = new TaskActivityImpl(executors.http(), executors.mongo(), executors.map(), executors.gen());
@@ -147,9 +147,9 @@ public final class FlowWorkerDaemon {
                 "axis-precheck-decomposed-timbleCallback", "axis-precheck-decomposed-status",
                 "axis-precheck-decomposed-status-persist", "axis-precheck-decomposed-notifyFail",
                 "axis-precheck-decomposed-coreAndStableId")) {
-            if (store.latest(DocType.FLOW, ref).isEmpty()) {
-                FlowDef flow = FlowDefLoader.loadFromClasspath("/flow-config/flows/" + ref + ".json");
-                publisher.publish(flow, "daemon", "bootstrap on first start");
+            FlowDef flow = FlowDefLoader.loadFromClasspath("/flow-config/flows/" + ref + ".json");
+            if (store.latest(DocType.FLOW, ref).orElse(0) < flow.version()) {   // versions are immutable: a changed file needs a bumped "version"
+                publisher.publish(flow, "daemon", "bootstrap (new version)");
                 System.out.println("published " + ref + "@" + flow.version() + " (first run)");
             }
         }
@@ -164,8 +164,8 @@ public final class FlowWorkerDaemon {
             try (InputStream in = r.getInputStream()) {
                 task = TaskDefLoader.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8));
             }
-            if (store.latest(DocType.TASK, task.taskRef()).isEmpty()) {
-                publisher.publish(task, "daemon", "bootstrap on first start");
+            if (store.latest(DocType.TASK, task.taskRef()).orElse(0) < task.version()) {
+                publisher.publish(task, "daemon", "bootstrap (new version)");
                 published++;
             }
         }

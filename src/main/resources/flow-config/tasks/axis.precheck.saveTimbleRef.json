@@ -1,6 +1,6 @@
 {
   "taskRef": "axis.precheck.saveTimbleRef",
-  "version": 1,
+  "version": 2,
   "kind": "MONGO",
   "fields": {
     "resource": "lendercore-mongo",
@@ -14,6 +14,7 @@
       "customerId": ":customerId",
       "responseMap": {},
       "approved": false,
+      "precheckStatus": "no_action",
       "creation_date": ":sys.now",
       "createdAt": ":sys.now",
       "_class": "com.rupeek.lender.entity.PrecheckEntity"

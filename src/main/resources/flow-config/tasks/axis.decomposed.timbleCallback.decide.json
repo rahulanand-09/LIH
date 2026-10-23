@@ -1,8 +1,8 @@
 {
   "taskRef": "axis.decomposed.timbleCallback.decide",
-  "version": 1,
+  "version": 2,
   "kind": "MAP",
   "fields": {
-    "template": "=cel.bind(n, rk.str(inputs.event.?name_match.orValue(null), '').trim().upperAscii(), cel.bind(a, rk.str(inputs.event.?aadhar_match.orValue(null), '').trim().upperAscii(), cel.bind(ok, !(n == 'N' || a == 'N'), {'ok': ok, 'customerId': rk.str(inputs.event.?customer_id.orValue(null), ''), 'status': ok ? 'SUCCESS' : 'FAILURE', 'message': ok ? 'Timble Precheck Successful' : 'Timble Precheck Failure : ' + rk.json({'timble_error_message': inputs.event.?timble_error_message, 'aadhar_match': inputs.event.?aadhar_match, 'name_match': inputs.event.?name_match})})))"
+    "template": "=cel.bind(n, rk.str(inputs.event.?name_match.orValue(null), '').trim().upperAscii(), cel.bind(a, rk.str(inputs.event.?aadhar_match.orValue(null), '').trim().upperAscii(), cel.bind(ok, !(n == 'N' || a == 'N'), {'ok': ok, 'customerId': rk.str(inputs.event.?customer_id.orValue(null), ''), 'status': ok ? 'SUCCESS' : 'FAILURE', 'message': ok ? 'Timble Precheck Successful' : 'Timble Precheck Failure : ' + rk.json(rk.compact({'timble_error_message': inputs.event.?timble_error_message, 'aadhar_match': inputs.event.?aadhar_match, 'name_match': inputs.event.?name_match}))})))"
   }
 }
