@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Console logging. `local` / `dev` profiles: human-readable, with the MDC (loanRequestId, workflowId, ...) appended.
+  Every other profile (qa, uat, prod, or none): one JSON object per line via Spring Boot's built-in structured
+  logging (logstash format, no extra dependency); MDC keys become top-level JSON fields (see docs/logging.md).
+-->
+<configuration>
+  <springProfile name="local | dev">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{30} %mdc - %msg%n</pattern>
+      </encoder>
+    </appender>
+  </springProfile>
+  <springProfile name="!local &amp; !dev">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="org.springframework.boot.logging.logback.StructuredLogEncoder">
+        <format>logstash</format>
+      </encoder>
+    </appender>
+  </springProfile>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>

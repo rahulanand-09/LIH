@@ -1,0 +1,22 @@
+{
+  "taskRef": "axis.precheck.timbleCallbackLatest",
+  "version": 1,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheck",
+    "action": "FIND_ONE",
+    "filter": {
+      "customerId": ":customerId",
+      "lenderSlug": "axis"
+    },
+    "sort": {
+      "creation_date": -1
+    },
+    "out": {
+      "found": "result != null",
+      "doc": "result != null ? result : {}",
+      "loanRequestId": "result != null ? result.loanRequestId : null"
+    }
+  }
+}

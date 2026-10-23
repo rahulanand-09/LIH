@@ -1,0 +1,17 @@
+{
+  "taskRef": "axis.decomposed.statusPersist.auditOutcome_fresh",
+  "version": 1,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheck",
+    "action": "FIND_ONE",
+    "filter": {
+      "loanRequestId": ":loanRequestId",
+      "lenderSlug": "axis"
+    },
+    "out": {
+      "responseMap": "result != null ? result.responseMap : {}"
+    }
+  }
+}

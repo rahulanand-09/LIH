@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.timbleCallback.okCheck",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=inputs.ok ? 'TIMBLE_OK' : 'TIMBLE_FAILED'"
+    }
+  }
+}

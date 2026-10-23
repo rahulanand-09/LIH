@@ -1,0 +1,29 @@
+{
+  "taskRef": "axis.precheck.status",
+  "version": 2,
+  "kind": "HTTP",
+  "fields": {
+    "resource": "axis-precheck",
+    "method": "POST",
+    "path": "/investor_integration/actions/invoke_api",
+    "query": {
+      "type": "dedupe_status"
+    },
+    "body": "=inputs.body",
+    "idempotent": true,
+    "success": "resp.status == 200 && [resp.body.?dedupe.orValue(''), resp.body.?pan.orValue(''), resp.body.?ramp.orValue(''), resp.body.?hunter.orValue('')].all(f, f in ['Y', 'WIP', 'N'])",
+    "classify": "resp.status == 429 || resp.status >= 500 ? 'TECHNICAL' : 'PERMANENT'",
+    "out": {
+      "dedupe": "resp.body.dedupe",
+      "pan": "resp.body.pan",
+      "ramp": "resp.body.ramp",
+      "hunter": "resp.body.hunter"
+    },
+    "audit": "PRECHECK_STATUS",
+    "lender": "axis",
+    "auditKeys": {
+      "loanRequestId": "=inputs.loanRequestId",
+      "customerId": "=inputs.customerId"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.decomposed.statusPersist.saveFinal_prep",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "approved": "=inputs.approvedFlag == 'true'"
+    }
+  }
+}

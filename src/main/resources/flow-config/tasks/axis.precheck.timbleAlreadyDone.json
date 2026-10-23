@@ -1,0 +1,11 @@
+{
+  "taskRef": "axis.precheck.timbleAlreadyDone",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=inputs.found && rk.str(inputs.doc.?clientLoanId.orValue(''), '') == inputs.idsValue && rk.str(inputs.doc.?reference_id.orValue(null), '') != '' ? 'ALREADY_INITIATED' : 'CONTINUE'",
+      "timbleReferenceId": "=inputs.doc.?reference_id.orValue(null)"
+    }
+  }
+}

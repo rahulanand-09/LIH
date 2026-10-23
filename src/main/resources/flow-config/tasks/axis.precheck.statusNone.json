@@ -1,0 +1,10 @@
+{
+  "taskRef": "axis.precheck.statusNone",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "template": {
+      "outcome": "=!inputs.found ? 'NO_PRECHECK' : 'CONTINUE'"
+    }
+  }
+}

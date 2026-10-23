@@ -1,0 +1,12 @@
+{
+  "taskRef": "gen.stableId",
+  "version": 1,
+  "kind": "GEN",
+  "fields": {
+    "action": "STABLE_ID",
+    "params": {
+      "reuse": "",
+      "seed": "=inputs.seed"
+    }
+  }
+}

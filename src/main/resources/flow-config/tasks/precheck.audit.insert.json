@@ -1,0 +1,29 @@
+{
+  "taskRef": "precheck.audit.insert",
+  "version": 1,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheckAudit",
+    "action": "INSERT",
+    "set": {
+      "loanRequestId": ":loanRequestId",
+      "customerId": ":customerId",
+      "lenderSlug": "axis",
+      "responseMap": {},
+      "loanProcess": ":loanProcess",
+      "precheckStatus": ":status",
+      "remarks": ":remarks",
+      "createdOn": ":sys.now",
+      "lastUpdatedOn": ":sys.now",
+      "version": 0,
+      "creation_date": ":sys.now",
+      "createdAt": ":sys.now",
+      "last_updated": ":sys.now",
+      "_class": "com.rupeek.lender.entity.PrecheckAuditEntity"
+    },
+    "out": {
+      "inserted": "result.inserted"
+    }
+  }
+}

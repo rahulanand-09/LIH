@@ -1,0 +1,29 @@
+{
+  "flowRef": "axis-precheck-decomposed-status-persist",
+  "version": 1,
+  "start": "saveFinal_prep",
+  "nodes": [
+    { "nodeType": "TASK", "id": "saveFinal_prep", "kind": "MAP", "taskRef": "axis.decomposed.statusPersist.saveFinal_prep", "fields": {},
+      "in": { "approvedFlag": "$.in.approvedFlag" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "saveFinal", "kind": "MONGO", "taskRef": "axis.precheck.saveStatusFinal", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "dedupe": "$.in.dedupe", "pan": "$.in.pan", "ramp": "$.in.ramp",
+        "hunter": "$.in.hunter", "overall": "$.in.overall", "approved": "$.saveFinal_prep.outputs.approved" },
+      "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "auditOutcome_fresh", "kind": "MONGO", "taskRef": "axis.decomposed.statusPersist.auditOutcome_fresh", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "auditOutcome_remarks", "kind": "MAP", "taskRef": "axis.decomposed.statusPersist.auditOutcome_remarks", "fields": {},
+      "in": { "overall": "$.in.overall" }, "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "auditOutcome", "kind": "MONGO", "taskRef": "precheck.audit.recordOutcome", "fields": {},
+      "in": { "loanRequestId": "$.in.loanRequestId", "status": "$.in.precheckStatus",
+        "remarks": "$.auditOutcome_remarks.outputs.remarks", "responseMap": "$.auditOutcome_fresh.outputs.responseMap" },
+      "onError": { "retries": 5, "then": "PARK" } },
+    { "nodeType": "END", "id": "done", "status": "DONE", "outputs": {} }
+  ],
+  "edges": [
+    { "from": "saveFinal_prep", "on": "OK", "to": "saveFinal" },
+    { "from": "saveFinal", "on": "OK", "to": "auditOutcome_fresh" },
+    { "from": "auditOutcome_fresh", "on": "OK", "to": "auditOutcome_remarks" },
+    { "from": "auditOutcome_remarks", "on": "OK", "to": "auditOutcome" },
+    { "from": "auditOutcome", "on": "OK", "to": "done" }
+  ]
+}

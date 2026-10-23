@@ -1,0 +1,19 @@
+{
+  "taskRef": "precheck.findByLoanRequest",
+  "version": 2,
+  "kind": "MONGO",
+  "fields": {
+    "resource": "lendercore-mongo",
+    "collection": "LenderCustomerPrecheck",
+    "action": "FIND_ONE",
+    "filter": {
+      "loanRequestId": ":loanRequestId",
+      "lenderSlug": "axis"
+    },
+    "out": {
+      "found": "result != null",
+      "doc": "result != null ? result : {}",
+      "customerId": "result != null ? rk.str(result.?customerId.orValue(null)) : null"
+    }
+  }
+}

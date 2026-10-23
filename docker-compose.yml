@@ -1,0 +1,25 @@
+version: "3.8"
+
+# Mongo (config registry + audit) and Redis (registry read-cache) backing LihWorkerApplication.
+# On this dev machine, pre-existing containers already serve these exact ports (lih-mongo on 27018,
+# docker-redis-1 on 6379) -- `docker compose up` on a fresh machine starts them from scratch.
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: lih-mongo
+    ports:
+      - "27018:27017"
+    volumes:
+      - lih-mongo-data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: lih-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - lih-redis-data:/data
+
+volumes:
+  lih-mongo-data:
+  lih-redis-data:

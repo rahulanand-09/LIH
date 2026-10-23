@@ -1,0 +1,53 @@
+{
+  "taskRef": "map.axis.precheckRequest",
+  "version": 1,
+  "kind": "MAP",
+  "fields": {
+    "resource": "axis-precheck",
+    "template": {
+      "agreement_id": "=env.preCheckAgreementId",
+      "customer_id": "=rk.str(inputs.customer.id)",
+      "application_id": null,
+      "client_loan_id": "=inputs.clientLoanId",
+      "model_name": "CLM1",
+      "customer_type": "individual",
+      "first_name": "=rk.str(rk.nameSplit(inputs.customer, 'first'))",
+      "middle_name": "=rk.str(rk.nameSplit(inputs.customer, 'middle'))",
+      "last_name": "=rk.str(rk.nameSplit(inputs.customer, 'last'))",
+      "name_as_per_pan": "=rk.str(inputs.customer.?customerPanName.orValue(null))",
+      "date_of_birth": "=rk.str(inputs.customer.?dob.orValue(null))",
+      "date_of_birth_as_per_pan": "=rk.str(inputs.customer.?dob.orValue(null))",
+      "mobile_number": "=rk.str(inputs.customer.?customerPhone.orValue(null))",
+      "email": "=rk.str(inputs.customer.?email.orValue(null))",
+      "gender": "=rk.str(inputs.customer.?gender.orValue(null))",
+      "dedupe_type": "single",
+      "aadhar_number": "=rk.str(inputs.customer.?aadhar.orValue(null))",
+      "dedupe_ids": [
+        {
+          "id_type": "PAN",
+          "id_value": "=rk.str(inputs.customer.?pan.orValue(null))"
+        },
+        {
+          "id_type": "AADHAR",
+          "id_value": "=rk.str(inputs.customer.?aadhar.orValue(null))"
+        }
+      ],
+      "address": [
+        {
+          "address_type": "PERMANENT",
+          "address_value": "=regex.replace(inputs.customer.customerAddress, r'\\s+', ' ').trim()",
+          "address_city": "=rk.str(inputs.customer.permanentAddress.?city.orValue(null))",
+          "address_state": "=rk.str(inputs.customer.permanentAddress.?state.orValue(null))",
+          "address_pincode": "=rk.str(inputs.customer.permanentAddress.?pin.orValue(null))"
+        },
+        {
+          "address_type": "COMMUNICATION",
+          "address_value": "=regex.replace(inputs.customer.customerAddress, r'\\s+', ' ').trim()",
+          "address_city": "=rk.str(inputs.customer.?presentAddress.?city.orValue(null))",
+          "address_state": "=rk.str(inputs.customer.?presentAddress.?state.orValue(null))",
+          "address_pincode": "=rk.str(inputs.customer.?presentAddress.?pin.orValue(null))"
+        }
+      ]
+    }
+  }
+}

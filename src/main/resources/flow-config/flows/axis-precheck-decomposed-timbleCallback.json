@@ -1,0 +1,33 @@
+{
+  "flowRef": "axis-precheck-decomposed-timbleCallback",
+  "version": 1,
+  "start": "decide",
+  "nodes": [
+    { "nodeType": "TASK", "id": "decide", "kind": "MAP", "taskRef": "axis.decomposed.timbleCallback.decide", "fields": {},
+      "in": { "event": "$.in.event" }, "onError": { "retries": 3, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "latest", "kind": "MONGO", "taskRef": "precheck.findLatestByCustomer", "fields": {},
+      "in": { "customerId": "$.decide.outputs.customerId" }, "onError": { "retries": 3, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "noPrecheck", "kind": "MAP", "taskRef": "axis.decomposed.timbleCallback.noPrecheck", "fields": {},
+      "in": { "found": "$.latest.outputs.found", "doc": "$.latest.outputs.doc" }, "onError": { "retries": 1, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "save", "kind": "MONGO", "taskRef": "axis.precheck.saveTimbleStatus", "fields": {},
+      "in": { "loanRequestId": "$.noPrecheck.outputs.loanRequestId", "status": "$.decide.outputs.status", "message": "$.decide.outputs.message" },
+      "onError": { "retries": 3, "then": "PARK" } },
+    { "nodeType": "TASK", "id": "okCheck", "kind": "MAP", "taskRef": "axis.decomposed.timbleCallback.okCheck", "fields": {},
+      "in": { "ok": "$.decide.outputs.ok" }, "onError": { "retries": 1, "then": "PARK" } },
+
+    { "nodeType": "END", "id": "noPrecheckEnd", "status": "NO_PRECHECK", "outputs": {} },
+    { "nodeType": "END", "id": "timbleOk", "status": "TIMBLE_OK",
+      "outputs": { "loanRequestId": "$.noPrecheck.outputs.loanRequestId" } },
+    { "nodeType": "END", "id": "timbleFailed", "status": "TIMBLE_FAILED",
+      "outputs": { "loanRequestId": "$.noPrecheck.outputs.loanRequestId" } }
+  ],
+  "edges": [
+    { "from": "decide", "on": "OK", "to": "latest" },
+    { "from": "latest", "on": "OK", "to": "noPrecheck" },
+    { "from": "noPrecheck", "on": "NO_PRECHECK", "to": "noPrecheckEnd" },
+    { "from": "noPrecheck", "on": "FOUND", "to": "save" },
+    { "from": "save", "on": "OK", "to": "okCheck" },
+    { "from": "okCheck", "on": "TIMBLE_OK", "to": "timbleOk" },
+    { "from": "okCheck", "on": "TIMBLE_FAILED", "to": "timbleFailed" }
+  ]
+}

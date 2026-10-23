@@ -1,0 +1,37 @@
+{
+  "taskRef": "axis.precheck.invoke",
+  "version": 2,
+  "kind": "HTTP",
+  "fields": {
+    "resource": "axis-precheck",
+    "method": "POST",
+    "path": "/investor_integration/actions/invoke_api",
+    "query": {
+      "type": "dedupe"
+    },
+    "body": "=inputs.body",
+    "success": "resp.status == 200 && resp.body.?errors.orValue([]).size() == 0 && resp.body.?data.orValue(null) != null",
+    "classify": "resp.status == 500 ? 'UNKNOWN' : resp.status >= 500 ? 'TECHNICAL' : 'BUSINESS'",
+    "out": {
+      "applicantId": "resp.body.?data.?applicantId.orValue(null)"
+    },
+    "onError": {
+      "BUSINESS": "REJECTED"
+    },
+    "audit": "PRECHECK_DEDUPE",
+    "lender": "axis",
+    "auditKeys": {
+      "loanRequestId": "=inputs.loanRequestId",
+      "customerId": "=inputs.customerId"
+    },
+    "piiPaths": [
+      "$.aadhar_number",
+      "$.dedupe_ids[*].id_value",
+      "$.mobile_number",
+      "$.email",
+      "$.date_of_birth",
+      "$.date_of_birth_as_per_pan",
+      "$.address[*].address_value"
+    ]
+  }
+}
