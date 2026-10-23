@@ -459,7 +459,7 @@ or transform step between the file on disk and `FlowDefLoader.loadFromClasspath(
   `axis.decomposed.timbleCallback.decide.json`'s `["OK"]`).
 - Two edges can share a `from`/`to` pair with a self-loop — `axis-precheck-decomposed-status.json`'s
   `{"from":"savePending","on":"OK","to":"existing"}` re-enters the same flow's `existing` node, polling until
-  `decision` stops returning `PENDING`. There is no inter-poll delay node kind yet (§11's existing caveat,
+  `decision` stops returning `PENDING`. (Superseded for Axis status: it now uses a `WAIT` with a timeout as its inter-poll timer, see docs/axis-parity.md.) There is no inter-poll delay node kind yet (§11's existing caveat,
   unchanged by the decomposition).
 
 ### 11b. The fully-decomposed, genuinely executable reference
@@ -512,7 +512,9 @@ of each carrying its own copy of the `core`/`existing`/`seed`/`ids` prefix the w
 **`axis-precheck-decomposed-status.json`** (8 `TASK` + 2 `SUBFLOW` + 4 `END`): `existing` → `none` (no record at
 all → `noPrecheckEnd`) → `alreadyFinal` (already approved/rejected → `alreadyFinalEnd`, forwarding
 `finalStatus`) → `request`/`call` (poll Axis status) → `timbleFlag`/`decision` → on `PENDING`, `savePending`
-**loops back to `existing`** (the self-loop from §11a); on `SUCCESS`/`FAILURE`, routes into one of two
+**waits on `pollDelay`** (a `WAIT` on a never-signalled event with `timeout: PT60S`, `onTimeoutOutcome: POLL` — a durable
+timer, so a `WIP` does not hot-loop the real Axis API) and then loops back to `existing` (the self-loop from §11a);
+`alreadyFinal` now distinguishes `ALREADY_FINAL` (stored SUCCESS) from `ALREADY_FAILED` (stored FAILURE, top level → `rejected`); on `SUCCESS`/`FAILURE`, routes into one of two
 **sibling `SUBFLOW` nodes that both point at the same child flow**, `persistSuccess`/`persistFailure` →
 `axis-precheck-decomposed-status-persist`, distinguished only by the literal `in` values each passes
 (`approvedFlag: "true"`/`"false"`, `precheckStatus: "success"`/`"failure"`) — one nested flow definition, two
