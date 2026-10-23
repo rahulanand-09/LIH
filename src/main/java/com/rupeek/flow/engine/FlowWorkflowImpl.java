@@ -29,6 +29,9 @@ import io.temporal.failure.ChildWorkflowFailure;
 import io.temporal.workflow.Async;
 import io.temporal.workflow.ChildWorkflowOptions;
 import io.temporal.workflow.Workflow;
+import com.rupeek.flow.observability.FlowMetrics;
+import com.rupeek.flow.observability.LogContext;
+import com.rupeek.flow.observability.WorkflowLog;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -65,10 +68,50 @@ public class FlowWorkflowImpl implements FlowWorkflow {
     private final Map<String, ResumeAction> pendingResume = new HashMap<>();
     private final Map<String, Map<String, Object>> pendingEvents = new HashMap<>();
     private final Map<String, Integer> pinnedVersions = new HashMap<>();
+    /** Replay-aware (silent while the SDK replays history); created lazily because it needs a workflow context. */
+    private WorkflowLog wlog;
 
     @Override
     public NodeResult run(FlowRunRequest req) {
-        return runFlowBody(req.flow(), req, "");
+        try {
+            return runFlowBody(req.flow(), req, "");
+        } catch (RuntimeException e) {
+            log().error(ctx(req, null), "flow failed flowRef={} depth={} error={}: {}", flowRefOf(req), req.depth(),
+                    e.getClass().getSimpleName(), e.getMessage());
+            throw e;
+        }
+    }
+
+    private WorkflowLog log() {
+        if (wlog == null) {
+            wlog = new WorkflowLog(Workflow.getLogger(FlowWorkflowImpl.class));
+        }
+        return wlog;
+    }
+
+    private static String flowRefOf(FlowRunRequest req) {
+        return LogContext.flowRef(req.flow().flowRef(), req.flow().version());
+    }
+
+    /** MDC pairs for a workflow-side log line; loanRequestId is present only if the flow's inputs carry one. */
+    private static String[] ctx(FlowRunRequest req, String nodeId) {
+        Object loan = req.inputs() == null ? null : req.inputs().get("loanRequestId");
+        return new String[] {LogContext.FLOW_REF, flowRefOf(req), LogContext.NODE_ID, nodeId,
+                LogContext.LOAN_REQUEST_ID, loan == null ? null : String.valueOf(loan)};
+    }
+
+    /** Metrics from workflow code count only live execution, never a history replay. */
+    private static void count(String name, String... tags) {
+        if (WorkflowLog.live()) {
+            FlowMetrics.count(name, tags);
+        }
+    }
+
+    /** One node finished: log it (with the edge taken, if any) and count its outcome. */
+    private void nodeDone(FlowRunRequest req, Node node, String keyPrefix, NodeResult result, String next, long startMs) {
+        log().info(ctx(req, keyPrefix + node.id()), "node exit nodeId={} outcome={} next={} durationMs={}",
+                keyPrefix + node.id(), result.outcome(), next, Workflow.currentTimeMillis() - startMs);
+        count(FlowMetrics.NODE_OUTCOMES, "flowRef", req.flow().flowRef(), "node", node.id(), "outcome", result.outcome());
     }
 
     /**
@@ -87,7 +130,10 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         // Resolved once, here, at this flow's own start — not transitively for the whole tree up front. A
         // nested subflow (or macro) started later (e.g. after a long WAIT) resolves its own refs at its own
         // start and may legitimately pin a newer version than its caller did.
-        pinnedVersions.putAll(resolveVersions(flow));
+        Map<String, Integer> resolved = resolveVersions(flow);
+        pinnedVersions.putAll(resolved);
+        log().info(ctx(req, null), "flow start flowRef={} depth={} inlinePrefix='{}' pinnedVersions={}",
+                LogContext.flowRef(flow.flowRef(), flow.version()), req.depth(), keyPrefix, resolved);
 
         String currentId = flow.start();
         while (true) {
@@ -96,6 +142,8 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                 throw ApplicationFailure.newNonRetryableFailure("Unknown node " + currentId, "ConfigError");
             }
             if (node instanceof EndNode end) {
+                log().info(ctx(req, keyPrefix + end.id()), "flow end flowRef={} status={} depth={}",
+                        LogContext.flowRef(flow.flowRef(), flow.version()), end.status(), req.depth());
                 return new NodeResult(end.status(), InputResolver.resolve(end.outputs(), req.inputs(), results));
             }
             if (node instanceof ParallelNode parallel) {
@@ -105,7 +153,9 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                 for (String branchId : parallel.branches()) {
                     Node branchNode = byId.get(branchId);
                     Async.procedure(() -> {
+                        long branchStart = Workflow.currentTimeMillis();
                         NodeResult branchResult = execute(branchNode, req, results, keyPrefix);
+                        nodeDone(req, branchNode, keyPrefix, branchResult, "join", branchStart);
                         results.put(branchId, branchResult);
                         nodeStatus.put(keyPrefix + branchId, "DONE");
                     });
@@ -118,10 +168,12 @@ public class FlowWorkflowImpl implements FlowWorkflow {
                 currentId = nextUnconditional(flow, node.id());
                 continue;
             }
+            long nodeStart = Workflow.currentTimeMillis();
             NodeResult result = execute(node, req, results, keyPrefix);
             results.put(node.id(), result);
             nodeStatus.put(keyPrefix + node.id(), "DONE");
             currentId = nextNodeId(flow, node.id(), result.outcome());
+            nodeDone(req, node, keyPrefix, result, currentId, nodeStart);
         }
     }
 
@@ -143,10 +195,12 @@ public class FlowWorkflowImpl implements FlowWorkflow {
     }
 
     private NodeResult execute(Node node, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
+        log().debug(ctx(req, keyPrefix + node.id()), "node enter nodeId={} type={}", keyPrefix + node.id(),
+                node.getClass().getSimpleName());
         return switch (node) {
             case TaskNode task -> runTask(task, req, results, keyPrefix);
             case SubflowNode subflow -> runSubflow(subflow, req, results, keyPrefix);
-            case WaitNode wait -> runWait(wait);
+            case WaitNode wait -> runWait(wait, req, keyPrefix);
             case ParallelNode ignored -> throw new IllegalStateException("PARALLEL is handled in run(), not execute()");
             case JoinNode ignored -> throw new IllegalStateException("JOIN is handled in run(), not execute()");
             case EndNode ignored -> throw new IllegalStateException("END is handled in run(), not execute()");
@@ -162,7 +216,7 @@ public class FlowWorkflowImpl implements FlowWorkflow {
      * its own inline {@code fields} unchanged.
      */
     private NodeResult runTask(TaskNode task, FlowRunRequest req, Map<String, NodeResult> results, String keyPrefix) {
-        return withPark(keyPrefix + task.id(), () -> {
+        return withPark(req, keyPrefix + task.id(), () -> {
             Map<String, Object> inputs = InputResolver.resolve(task.in(), req.inputs(), results);
             int version = task.taskRef() != null ? pinnedVersions.getOrDefault(task.taskRef(), 1) : 1;
             Map<String, Object> fields = task.fields();
@@ -223,11 +277,14 @@ public class FlowWorkflowImpl implements FlowWorkflow {
         Map<String, Object> childInputs = InputResolver.resolve(subflow.in(), req.inputs(), results);
         FlowRunRequest childReq = new FlowRunRequest(childFlow, childInputs, req.registry(), childDepth, childChain);
 
+        log().info(ctx(req, keyPrefix + subflow.id()), "subflow spawn mode={} childFlowRef={} depth={} nodeId={}",
+                subflow.inline() ? "inline" : "child", LogContext.flowRef(childFlow.flowRef(), childFlow.version()),
+                childDepth, keyPrefix + subflow.id());
         if (subflow.inline()) {
             return runFlowBody(childFlow, childReq, keyPrefix + subflow.id() + ".");
         }
 
-        return withPark(keyPrefix + subflow.id(), () -> {
+        return withPark(req, keyPrefix + subflow.id(), () -> {
             // ABANDON, not the default TERMINATE: a parked grandchild must survive this parent completing/retrying.
             // An explicit execution timeout, not an implicit default — a child that can itself park indefinitely
             // (withPark) must not be bounded by whatever a platform default happens to be.
@@ -275,7 +332,9 @@ public class FlowWorkflowImpl implements FlowWorkflow {
     }
 
     /** Parks until {@code wait}'s named event arrives (or its timeout, if one is set) — not a PARK, just a wait. */
-    private NodeResult runWait(WaitNode wait) {
+    private NodeResult runWait(WaitNode wait, FlowRunRequest req, String keyPrefix) {
+        String nodeId = keyPrefix + wait.id();
+        log().info(ctx(req, nodeId), "wait entered nodeId={} event={} timeout={}", nodeId, wait.event(), wait.timeout());
         boolean arrived;
         if (wait.timeout() != null) {
             arrived = Workflow.await(wait.timeout(), () -> pendingEvents.containsKey(wait.event()));
@@ -284,8 +343,11 @@ public class FlowWorkflowImpl implements FlowWorkflow {
             arrived = true;
         }
         if (arrived) {
+            log().info(ctx(req, nodeId), "wait event received nodeId={} event={}", nodeId, wait.event());
             return new NodeResult("RECEIVED", pendingEvents.remove(wait.event()));
         }
+        log().warn(ctx(req, nodeId), "wait timed out nodeId={} event={} outcome={}", nodeId, wait.event(),
+                wait.onTimeoutOutcome());
         return new NodeResult(wait.onTimeoutOutcome(), Map.of());
     }
 
@@ -293,20 +355,35 @@ public class FlowWorkflowImpl implements FlowWorkflow {
      * Runs {@code attempt}; if it exhausts its own retries (activity) or fails unexpectedly (child workflow),
      * parks {@code nodeId} instead of propagating, and waits for an operator's {@link #resume}.
      */
-    private NodeResult withPark(String nodeId, Supplier<NodeResult> attempt) {
+    private NodeResult withPark(FlowRunRequest req, String nodeId, Supplier<NodeResult> attempt) {
         while (true) {
             try {
                 return attempt.get();
             } catch (ActivityFailure | ChildWorkflowFailure e) {
                 nodeStatus.put(nodeId, "PARKED");
+                // Only the failure type, not its message: the masked detail is on the activity's own WARN line.
+                Throwable cause = e.getCause();
+                String reason = cause instanceof ApplicationFailure af ? af.getType()
+                        : (cause != null ? cause : e).getClass().getSimpleName();
+                log().warn(ctx(req, nodeId), "PARK entered nodeId={} reason={} (waiting for operator resume signal)",
+                        nodeId, reason);
+                count(FlowMetrics.PARK_EVENTS, "flowRef", req.flow().flowRef(), "node", simpleNode(nodeId), "event", "entered");
                 Workflow.await(() -> pendingResume.containsKey(nodeId));
                 ResumeAction action = pendingResume.remove(nodeId);
+                log().info(ctx(req, nodeId), "PARK resumed nodeId={} action={} outcome={}", nodeId, action.action(),
+                        action.outcome());
+                count(FlowMetrics.PARK_EVENTS, "flowRef", req.flow().flowRef(), "node", simpleNode(nodeId), "event", "resumed");
                 if ("SKIP".equals(action.action())) {
                     return new NodeResult(action.outcome(), Map.of());
                 }
                 // RETRY: loop back and re-attempt with a fresh budget.
             }
         }
+    }
+
+    /** Last segment of a macro-prefixed node key ({@code call.inner} -> {@code inner}) so the metric tag is a config node id. */
+    private static String simpleNode(String key) {
+        return key.substring(key.lastIndexOf('.') + 1);
     }
 
     private ActivityOptions activityOptions(OnError onError) {

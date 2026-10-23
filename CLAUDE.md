@@ -49,7 +49,7 @@ locally that means a WireMock instance on the port those resources' `*_BASEURL` 
 executors in `task.executor.{http,mongo,map,gen}`), `registry` (Registry/Publisher/Loader/Source classes; Temporal
 registry activities `Fetch*/Resolve*` in `registry.activity`; storage in `registry.store`), `config`
 (`FlowAutoConfiguration`, `FlowRegistryAutoConfiguration`, `FlowProperties`), `worker` (`FlowTemporalWorker`),
-`expr`, `audit`, `resource`; `api` and `observability` are empty placeholders (`package-info.java` only).
+`expr`, `audit`, `resource`; `observability` (log/metric helpers, activity interceptor, request-id filter — see `docs/logging.md`); `api` is an empty placeholder (`package-info.java` only).
 
 **Config resources** are unified under `src/main/resources/flow-config/{flows,tasks,resources}`.
 

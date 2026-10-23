@@ -1,5 +1,7 @@
 package com.rupeek.flow.registry.store;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
@@ -26,6 +28,8 @@ import java.util.OptionalInt;
  * {@code $setOnInsert}.
  */
 public final class SpringDataConfigStore implements ConfigStore {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SpringDataConfigStore.class);
 
     private final FlowVersionRepository flowVersions;
     private final TaskVersionRepository taskVersions;
@@ -98,6 +102,7 @@ public final class SpringDataConfigStore implements ConfigStore {
                 .setOnInsert("createdAt", now)
                 .push("history", move);
         mongoTemplate.upsert(query, update, FlowPointerDocument.class);
+        LOG.info("registry pointer moved type={} ref={} latest={} by={} publishId={}", type, ref, version, by, publishId);
     }
 
     private static String pointerId(DocType type, String ref) {

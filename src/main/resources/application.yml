@@ -33,3 +33,16 @@ flow:
         workflow-id-prefix: axis-precheck-decomposed-
         customer-id-field: customer_id
         lender-slug: axis
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: lih

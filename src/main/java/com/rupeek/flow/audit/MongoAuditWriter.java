@@ -6,6 +6,8 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rupeek.flow.observability.FlowMetrics;
+
 import java.time.Instant;
 import java.util.Date;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -36,6 +38,7 @@ public final class MongoAuditWriter implements AuditWriter, AutoCloseable {
                 },
                 (task, pool) -> {
                     LOG.warn("audit queue full, dropping the oldest pending audit record");
+                    FlowMetrics.count(FlowMetrics.AUDIT_DROPPED, "reason", "queue_full");
                     pool.getQueue().poll();
                     pool.execute(task);
                 });
@@ -47,6 +50,7 @@ public final class MongoAuditWriter implements AuditWriter, AutoCloseable {
             executor.execute(() -> insert(record));
         } catch (RuntimeException e) {
             LOG.warn("audit record not queued: {}", e.toString());
+            FlowMetrics.count(FlowMetrics.AUDIT_DROPPED, "reason", "not_queued");
         }
     }
 
@@ -70,6 +74,7 @@ public final class MongoAuditWriter implements AuditWriter, AutoCloseable {
                     .append("createdAt", Date.from(Instant.now())));
         } catch (RuntimeException e) {
             LOG.warn("audit record not written for {} {}: {}", r.requestType(), r.loanRequestId(), e.toString());
+            FlowMetrics.count(FlowMetrics.AUDIT_DROPPED, "reason", "write_failed");
         }
     }
 

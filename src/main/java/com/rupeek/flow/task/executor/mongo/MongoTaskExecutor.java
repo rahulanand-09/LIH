@@ -188,6 +188,8 @@ public final class MongoTaskExecutor {
             throw new FlowTaskFailure(TaskFailureType.PERMANENT, nodeId + ": Mongo error: " + e.getMessage(), e);
         }
 
+        com.rupeek.flow.observability.MongoCallLog.done(action.name(), resource.database(), collectionName, result,
+                System.currentTimeMillis() - start);
         if (requestType != null) {
             TaskCall call = new TaskCall(request.caseId(), nodeId, request.taskRef(), AuditFields.lender(fields),
                     loanRequestId, customerId, requestType, target, boundFilter, null, result, piiPaths);

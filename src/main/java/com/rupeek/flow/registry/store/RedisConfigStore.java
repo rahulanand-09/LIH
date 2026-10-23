@@ -1,5 +1,8 @@
 package com.rupeek.flow.registry.store;
 
+import com.rupeek.flow.observability.FlowMetrics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
@@ -23,6 +26,8 @@ import java.util.OptionalInt;
  */
 public final class RedisConfigStore implements ConfigStore {
 
+    private static final Logger LOG = LoggerFactory.getLogger(RedisConfigStore.class);
+
     private final ConfigStore delegate;
     private final StringRedisTemplate redis;
     private final Duration versionTtl;
@@ -40,8 +45,10 @@ public final class RedisConfigStore implements ConfigStore {
         String key = versionKey(type, ref, version);
         Map<Object, Object> cached = redis.opsForHash().entries(key);
         if (!cached.isEmpty()) {
+            cache("version", "hit", key);
             return Optional.of(toVersion(type, cached));
         }
+        cache("version", "miss", key);
         Optional<StoredVersion> fromStore = delegate.find(type, ref, version);
         fromStore.ifPresent(v -> {
             redis.opsForHash().putAll(key, toHash(v));
@@ -55,8 +62,10 @@ public final class RedisConfigStore implements ConfigStore {
         String key = pointerKey(type, ref);
         String cached = redis.opsForValue().get(key);
         if (cached != null) {
+            cache("pointer", "hit", key);
             return OptionalInt.of(Integer.parseInt(cached));
         }
+        cache("pointer", "miss", key);
         OptionalInt fromStore = delegate.latest(type, ref);
         fromStore.ifPresent(v -> redis.opsForValue().set(key, String.valueOf(v), pointerTtl));
         return fromStore;
@@ -66,6 +75,7 @@ public final class RedisConfigStore implements ConfigStore {
     public void movePointer(DocType type, String ref, int version, String by, String reason, String publishId) {
         delegate.movePointer(type, ref, version, by, reason, publishId);
         redis.delete(pointerKey(type, ref));
+        LOG.debug("registry cached pointer evicted type={} ref={} newLatest={}", type, ref, version);
     }
 
     @Override
@@ -76,6 +86,11 @@ public final class RedisConfigStore implements ConfigStore {
     @Override
     public void insert(StoredVersion version) {
         delegate.insert(version);
+    }
+
+    private static void cache(String what, String result, String key) {
+        LOG.debug("registry cache {} {} key={}", what, result, key);
+        FlowMetrics.count(FlowMetrics.REGISTRY_CACHE, "what", what, "result", result);
     }
 
     private static String versionKey(DocType type, String ref, int version) {

@@ -1,3 +1,4 @@
 com.rupeek.flow.config.FlowAutoConfiguration
 com.rupeek.flow.config.FlowRegistryAutoConfiguration
 com.rupeek.flow.api.ApiConfiguration
+com.rupeek.flow.observability.ObservabilityAutoConfiguration

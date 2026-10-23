@@ -13,6 +13,7 @@ import com.rupeek.flow.audit.TaskAuditor;
 import com.rupeek.flow.audit.TaskCall;
 import com.rupeek.flow.expr.ExpressionEngine;
 import com.rupeek.flow.expr.ScopeDecl;
+import com.rupeek.flow.observability.HttpCallLog;
 import com.rupeek.flow.expr.TemplateEvaluator;
 import com.rupeek.flow.resource.AuthProviders;
 import com.rupeek.flow.resource.Resource;
@@ -180,6 +181,8 @@ public final class HttpTaskExecutor {
         List<String> piiPaths = AuditFields.piiPaths(fields);
         Instant invokedAt = Instant.now();
         long start = System.currentTimeMillis();
+        HttpCallLog callLog = HttpCallLog.begin(resourceRef, method, uri, piiPaths, renderedBody, request.inputs());
+        callLog.request(renderedBody);
 
         HttpResponse<byte[]> response;
         try {
@@ -187,18 +190,26 @@ public final class HttpTaskExecutor {
         } catch (HttpConnectTimeoutException e) {
             auditFailure(requestType, request, fields, target, loanRequestId, customerId, piiPaths, renderedBody,
                     "TIMEOUT", e.getMessage(), invokedAt, start);
+            callLog.transportFailure(System.currentTimeMillis() - start, e,
+                    ErrorClassifier.forTransport(declaredIdempotent, false));
             throw failureFor(ErrorClassifier.forTransport(declaredIdempotent, false), nodeId + ": connect timeout", e);
         } catch (HttpTimeoutException e) {
             auditFailure(requestType, request, fields, target, loanRequestId, customerId, piiPaths, renderedBody,
                     "TIMEOUT", e.getMessage(), invokedAt, start);
+            callLog.transportFailure(System.currentTimeMillis() - start, e,
+                    ErrorClassifier.forTransport(declaredIdempotent, true));
             throw failureFor(ErrorClassifier.forTransport(declaredIdempotent, true), nodeId + ": no response within the timeout", e);
         } catch (ConnectException e) {
             auditFailure(requestType, request, fields, target, loanRequestId, customerId, piiPaths, renderedBody,
                     "TECHNICAL_FAILURE", e.getMessage(), invokedAt, start);
+            callLog.transportFailure(System.currentTimeMillis() - start, e,
+                    ErrorClassifier.forTransport(declaredIdempotent, false));
             throw failureFor(ErrorClassifier.forTransport(declaredIdempotent, false), nodeId + ": could not connect", e);
         } catch (IOException e) {
             auditFailure(requestType, request, fields, target, loanRequestId, customerId, piiPaths, renderedBody,
                     "TECHNICAL_FAILURE", e.getMessage(), invokedAt, start);
+            callLog.transportFailure(System.currentTimeMillis() - start, e,
+                    ErrorClassifier.forTransport(declaredIdempotent, true));
             throw failureFor(ErrorClassifier.forTransport(declaredIdempotent, true), nodeId + ": I/O error: " + e.getMessage(), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -207,6 +218,7 @@ public final class HttpTaskExecutor {
 
         Map<String, Object> resp = toResp(nodeId, response);
         vars.put("resp", resp);
+        callLog.response(response.statusCode(), System.currentTimeMillis() - start, resp.get("body"));
 
         if (requestType != null) {
             TaskCall call = new TaskCall(request.caseId(), nodeId, request.taskRef(), AuditFields.lender(fields),
@@ -216,6 +228,9 @@ public final class HttpTaskExecutor {
 
         boolean success = expressions.evalBool(
                 expressions.compile(successExpr, ScopeDecl.HTTP_RESPONSE, nodeId + ".fields.success"), vars);
+        if (success) {
+            callLog.verdict(response.statusCode(), true, null, null);
+        }
         if (!success) {
             String classifyExpr = fields.get("classify") instanceof String c ? c : null;
             TaskFailureType type = classifyExpr != null
@@ -224,6 +239,7 @@ public final class HttpTaskExecutor {
                     : ErrorClassifier.forFailedSuccess(com.rupeek.flow.model.OperationKind.HTTP, response.statusCode(),
                             ErrorClassifier.isIdempotentHttp(declaredIdempotent, method));
             String mappedOutcome = onError.get(type.name());
+            callLog.verdict(response.statusCode(), false, type, mappedOutcome);
             if (mappedOutcome != null) {
                 return new TaskResult(mappedOutcome, Map.of());
             }

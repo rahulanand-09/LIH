@@ -14,6 +14,8 @@ import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
+import io.temporal.worker.WorkerFactoryOptions;
+import com.rupeek.flow.observability.LihWorkerInterceptor;
 import io.temporal.worker.WorkerOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,7 +62,8 @@ public final class FlowTemporalWorker implements SmartLifecycle {
         stubs = com.rupeek.flow.config.TemporalConnection.stubs(settings);
         WorkflowClient client = WorkflowClient.newInstance(stubs,
                 WorkflowClientOptions.newBuilder().setNamespace(settings.getNamespace()).build());
-        factory = WorkerFactory.newInstance(client);
+        factory = WorkerFactory.newInstance(client,
+                WorkerFactoryOptions.newBuilder().setWorkerInterceptors(new LihWorkerInterceptor()).build());
         Worker worker = factory.newWorker(settings.getTaskQueue(), WorkerOptions.newBuilder()
                 .setMaxConcurrentActivityExecutionSize(settings.getMaxConcurrentActivities())
                 .build());
@@ -70,6 +73,23 @@ public final class FlowTemporalWorker implements SmartLifecycle {
         running = true;
         LOG.info("Flow worker polling task queue '{}' on {} (namespace {})", settings.getTaskQueue(),
                 settings.getTarget(), settings.getNamespace());
+        probeConnectivity();
+    }
+
+    /** Stubs connect lazily, so an unreachable server would otherwise be silent: say so, once, in the log. Non-fatal. */
+    private void probeConnectivity() {
+        Thread probe = new Thread(() -> {
+            try {
+                stubs.blockingStub().withDeadlineAfter(10, TimeUnit.SECONDS)
+                        .getSystemInfo(io.temporal.api.workflowservice.v1.GetSystemInfoRequest.getDefaultInstance());
+                LOG.info("Temporal reachable at {} (namespace {})", settings.getTarget(), settings.getNamespace());
+            } catch (RuntimeException e) {
+                LOG.error("Temporal NOT reachable at {} (namespace {}): {} - worker keeps retrying in the background",
+                        settings.getTarget(), settings.getNamespace(), e.toString());
+            }
+        }, "temporal-connectivity-probe");
+        probe.setDaemon(true);
+        probe.start();
     }
 
     @Override
