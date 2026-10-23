@@ -19,3 +19,17 @@ flow:
       pointer-ttl: 10s
   temporal:
     task-queue: lih-l2
+    target: ${TEMPORAL_ADDRESS:localhost:7233}
+    namespace: ${TEMPORAL_NAMESPACE:default}
+    api-key: ${TEMPORAL_API_KEY:}
+    tls-cert-path: ${TEMPORAL_TLS_CERT:}
+    tls-key-path: ${TEMPORAL_TLS_KEY:}
+  api:
+    key: ${FLOW_API_KEY:}
+    callback-secret: ${FLOW_CALLBACK_SECRET:}
+    callbacks:
+      YUBI_TIMBLE_STATUS:
+        event-name: timbleCallback
+        workflow-id-prefix: axis-precheck-decomposed-
+        customer-id-field: customer_id
+        lender-slug: axis

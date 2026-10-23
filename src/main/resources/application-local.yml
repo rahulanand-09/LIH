@@ -1,0 +1,7 @@
+# Local dev: seed the registry from the classpath and use a known API key.
+flow:
+  registry:
+    seed:
+      enabled: true
+  api:
+    key: local-dev-key
