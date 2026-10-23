@@ -43,6 +43,17 @@ public class FlowProperties {
          * so the flow engine's own queue can scale and deploy independently of the L1 worker. */
         private String taskQueue = "lih-l2";
         private int maxConcurrentActivities = 50;
+        /** Optional Temporal Cloud auth: API key (implies TLS), or mTLS client cert/key (PKCS8 PEM file paths). */
+        private String apiKey = "";
+        private String tlsCertPath = "";
+        private String tlsKeyPath = "";
+
+        public String getApiKey() { return apiKey; }
+        public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+        public String getTlsCertPath() { return tlsCertPath; }
+        public void setTlsCertPath(String tlsCertPath) { this.tlsCertPath = tlsCertPath; }
+        public String getTlsKeyPath() { return tlsKeyPath; }
+        public void setTlsKeyPath(String tlsKeyPath) { this.tlsKeyPath = tlsKeyPath; }
 
         public String getTarget() { return target; }
         public void setTarget(String target) { this.target = target; }

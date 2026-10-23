@@ -57,8 +57,7 @@ public final class FlowTemporalWorker implements SmartLifecycle {
 
     @Override
     public void start() {
-        stubs = WorkflowServiceStubs.newServiceStubs(
-                WorkflowServiceStubsOptions.newBuilder().setTarget(settings.getTarget()).build());
+        stubs = com.rupeek.flow.config.TemporalConnection.stubs(settings);
         WorkflowClient client = WorkflowClient.newInstance(stubs,
                 WorkflowClientOptions.newBuilder().setNamespace(settings.getNamespace()).build());
         factory = WorkerFactory.newInstance(client);
