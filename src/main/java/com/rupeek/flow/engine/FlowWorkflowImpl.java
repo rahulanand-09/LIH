@@ -54,6 +54,13 @@ public class FlowWorkflowImpl implements FlowWorkflow {
     /** SUBFLOW nesting cap — a backstop against a cycle the publish-time check missed, not just a correctness net. */
     private static final int MAX_DEPTH = 25;
 
+    /**
+     * Upper bound for one task attempt. Must exceed the longest {@code resource.timeoutMs.read} (Axis precheck is
+     * 120s, matching legacy's RestTemplate): a shorter value makes Temporal time the activity out while the HTTP
+     * call is still legitimately waiting, then retry it -- a duplicate POST to a non-idempotent lender endpoint.
+     */
+    static final Duration TASK_START_TO_CLOSE = Duration.ofSeconds(150);
+
     private final Map<String, String> nodeStatus = new HashMap<>();
     private final Map<String, ResumeAction> pendingResume = new HashMap<>();
     private final Map<String, Map<String, Object>> pendingEvents = new HashMap<>();
@@ -305,7 +312,7 @@ public class FlowWorkflowImpl implements FlowWorkflow {
     private ActivityOptions activityOptions(OnError onError) {
         int attempts = onError != null ? Math.max(1, onError.retries()) : 1;
         return ActivityOptions.newBuilder()
-                .setStartToCloseTimeout(Duration.ofSeconds(30))
+                .setStartToCloseTimeout(TASK_START_TO_CLOSE)
                 .setRetryOptions(RetryOptions.newBuilder()
                         .setMaximumAttempts(attempts)
                         .setDoNotRetry(TaskFailureType.UNKNOWN.name(), TaskFailureType.BUSINESS.name(),
